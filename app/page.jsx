@@ -4,55 +4,75 @@ import Navbar from "@/components/Navbar";
 
 export default function Home() {
   return (
-    <div className="min-h-screen relative">
+    <div className="h-screen overflow-hidden relative flex flex-col">
       <Navbar />
-      <div className="container mx-auto px-4 py-24">
+      <div className="flex-1 flex flex-col justify-center items-center px-4 max-w-5xl mx-auto w-full pb-6">
         
         {/* Hero Section */}
-        <section className="text-center max-w-3xl mx-auto mb-28">
-          <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-gray-100 via-gray-300 to-gray-500 bg-clip-text text-transparent mb-6 tracking-tight">
+        <section className="text-center max-w-3xl mx-auto mb-8 md:mb-10">
+          <h1 className="text-5xl md:text-6xl font-bold text-[#f5f5f5] mb-4 tracking-tight">
             QuickApply
           </h1>
-          <p className="text-lg md:text-xl text-gray-400 mb-10">
-            Upload your resume. Get matched with perfect jobs instantly.
+          <p className="text-lg md:text-xl text-[#a1a1aa] mb-6 md:mb-8 overflow-hidden max-w-full">
+            <span className="qa-typing">Upload your resume. Get matched with perfect jobs instantly.</span>
           </p>
-          <Link href="/upload" className="inline-block glass-card px-7 py-3 rounded-full text-base font-medium transition-all hover:scale-[1.02] hover:-translate-y-1 text-gray-100">
+          <Link href="/upload" className="inline-block upload-btn">
             Upload Resume
           </Link>
         </section>
 
         {/* How It Works Section */}
-        <section id="how-it-works" className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+        <section id="how-it-works-section" className="w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
             {/* Card 1 */}
-            <div className="glass-card p-6 rounded-xl text-center hover:-translate-y-2 transition-transform duration-300 flex flex-col items-center">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-purple to-primary-blue rounded-full flex items-center justify-center text-lg font-medium text-white mb-5 shadow-sm opacity-90">
-                1
-              </div>
-              <h3 className="text-lg font-medium mb-2 text-gray-200">Upload Resume</h3>
-              <p className="text-sm text-gray-500">Drop your PDF resume</p>
+            <div className="feature-card qa-glowCard mx-auto w-full flex flex-col items-center justify-center min-h-[140px]">
+              <h3 className="text-lg font-medium mb-2 text-[#f5f5f5]">Upload Resume</h3>
+              <p className="text-sm text-[#a1a1aa]">Drop your PDF resume</p>
             </div>
 
             {/* Card 2 */}
-            <div className="glass-card p-6 rounded-xl text-center hover:-translate-y-2 transition-transform duration-300 flex flex-col items-center">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-purple to-primary-blue rounded-full flex items-center justify-center text-lg font-medium text-white mb-5 shadow-sm opacity-90">
-                2
-              </div>
-              <h3 className="text-lg font-medium mb-2 text-gray-200">AI Analysis</h3>
-              <p className="text-sm text-gray-500">We extract your skills</p>
+            <div className="feature-card qa-glowCard mx-auto w-full flex flex-col items-center justify-center min-h-[140px]">
+              <h3 className="text-lg font-medium mb-2 text-[#f5f5f5]">AI Analysis</h3>
+              <p className="text-sm text-[#a1a1aa]">We extract your skills</p>
             </div>
 
             {/* Card 3 */}
-            <div className="glass-card p-6 rounded-xl text-center hover:-translate-y-2 transition-transform duration-300 flex flex-col items-center">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-purple to-primary-blue rounded-full flex items-center justify-center text-lg font-medium text-white mb-5 shadow-sm opacity-90">
-                3
-              </div>
-              <h3 className="text-lg font-medium mb-2 text-gray-200">Get Matched</h3>
-              <p className="text-sm text-gray-500">Find perfect job matches</p>
+            <div className="feature-card qa-glowCard mx-auto w-full flex flex-col items-center justify-center min-h-[140px]">
+              <h3 className="text-lg font-medium mb-2 text-[#f5f5f5]">Get Matched</h3>
+              <p className="text-sm text-[#a1a1aa]">Find perfect job matches</p>
             </div>
           </div>
         </section>
 
+        {/* Footer */}
+        <footer className="mt-8 text-center">
+          <p className="text-xs md:text-sm text-white/55 tracking-wide">
+            Built for speed — upload once, apply faster. No login.
+          </p>
+        </footer>
+
+      </div>
+
+      <div id="how-it-works" className="qa-modal">
+        <a href="#" className="qa-modalBackdrop" aria-label="Close modal"></a>
+
+        <div className="qa-modalCard">
+          <div className="qa-modalHeader">
+            <h2 className="qa-modalTitle">How it Works</h2>
+            <a href="#" className="qa-modalClose" aria-label="Close">✕</a>
+          </div>
+
+          <ol className="qa-modalList">
+            <li><span className="qa-step">1</span> Upload your resume (PDF).</li>
+            <li><span className="qa-step">2</span> We analyze your resume and extract key skills.</li>
+            <li><span className="qa-step">3</span> You get matched with relevant jobs instantly.</li>
+            <li><span className="qa-step">4</span> Click “Apply” to go to the official job link.</li>
+          </ol>
+
+          <p className="qa-modalNote">
+            Tip: Use a clean PDF resume for best results.
+          </p>
+        </div>
       </div>
     </div>
   );
