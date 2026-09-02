@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
 
@@ -16,7 +16,6 @@ const STEPS = [
 ];
 
 const STEP_DURATION = 1500; // ms per step
-const TOTAL_DURATION = STEP_DURATION * STEPS.length; // 9000ms
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -173,7 +172,7 @@ function CancelModal({ onClose, onConfirm }) {
 }
 
 /** Invalid resume error modal */
-function ErrorModal({ onBack }) {
+function ErrorModal({ reason, onBack, onRetry }) {
   return (
     <div className="processing-modal-backdrop">
       <div
@@ -186,7 +185,7 @@ function ErrorModal({ onBack }) {
         </div>
         <h2 className="text-lg font-bold text-white mb-2">Invalid Resume Detected</h2>
         <p className="text-sm text-[rgba(255,255,255,0.55)] mb-6 leading-relaxed">
-          This doesn&apos;t appear to be a resume. Please upload a valid resume PDF.
+          {reason || "This doesn\u0027t appear to be a resume. Please upload a valid resume PDF."}
         </p>
 
         <div className="flex gap-3">
@@ -199,7 +198,7 @@ function ErrorModal({ onBack }) {
             Go Back
           </button>
           <button
-            onClick={onBack}
+            onClick={onRetry || onBack}
             className="flex-1 py-2.5 rounded-xl bg-[rgba(239,68,68,0.12)] border border-[rgba(239,68,68,0.45)]
               text-red-400 text-sm font-semibold transition-all duration-300
               hover:bg-[rgba(239,68,68,0.2)] hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]"
@@ -213,11 +212,17 @@ function ErrorModal({ onBack }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-export default function ProcessingPage() {
+function ProcessingPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Demo toggle: set false to show error modal instead of navigating to /score
-  const isValidResume = true;
+  // Read rid from URL query param and persist to localStorage
+  const rid = searchParams.get("rid") || "";
+  useEffect(() => {
+    if (rid) {
+      localStorage.setItem("quickapply_resume_id", rid);
+    }
+  }, [rid]);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -225,42 +230,47 @@ export default function ProcessingPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const [showNavbar, setShowNavbar] = useState(true);
+
+  // AI analysis state
+  const [analysisStatus, setAnalysisStatus] = useState("pending"); // pending, success, error
+  const [invalidReason, setInvalidReason] = useState("");
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const analysisStatusRef = useRef("pending");
 
   // Track elapsed time to resume correctly after pause
-  const startTimeRef = useRef(null);
-  const pausedProgressRef = useRef(0);
   const pausedStepRef = useRef(0);
-  const rafRef = useRef(null);
   const stepTimerRef = useRef(null);
 
-  // ── Progress bar animation via requestAnimationFrame ────────────────────────
-  const startProgress = (fromProgress) => {
-    const remaining = 100 - fromProgress;
-    const remainingTime = (remaining / 100) * TOTAL_DURATION;
-    const startTime = performance.now();
-
-    const tick = (now) => {
-      const elapsed = now - startTime;
-      const newProgress = Math.min(fromProgress + (elapsed / remainingTime) * remaining, 100);
-      setProgress(Math.floor(newProgress));
-
-      if (newProgress < 100) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-  };
-
-  const stopProgress = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  };
+  // ── Progress bar update ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (isDone) {
+      setProgress(100);
+    } else {
+      setProgress(Math.floor((currentStep / STEPS.length) * 100));
+    }
+  }, [currentStep, isDone]);
 
   // ── Step sequencer ──────────────────────────────────────────────────────────
   const scheduleNextStep = (step) => {
     if (step >= STEPS.length) return;
 
+    // Step 5 completes much faster once step 4 (AI check) is done
+    const delay = step === 5 ? 500 : STEP_DURATION;
+
     stepTimerRef.current = setTimeout(() => {
+      // Pause at step 4 ("Cross-checking with AI...") if API is still pending
+      if (step === 4 && analysisStatusRef.current === "pending") {
+        // Just wait and poll again shortly
+        scheduleNextStep(step);
+        return;
+      }
+
+      // If error or invalid occurred, stop advancing
+      if (analysisStatusRef.current === "error" || analysisStatusRef.current === "invalid") {
+        return;
+      }
+
       const nextStep = step + 1;
 
       if (nextStep < STEPS.length) {
@@ -269,9 +279,10 @@ export default function ProcessingPage() {
         scheduleNextStep(nextStep);
       } else {
         // All steps done
+        setCurrentStep(STEPS.length);
         setIsDone(true);
       }
-    }, STEP_DURATION);
+    }, delay);
   };
 
   const clearStepTimer = () => {
@@ -280,25 +291,71 @@ export default function ProcessingPage() {
 
   // ── Start on mount ──────────────────────────────────────────────────────────
   useEffect(() => {
-    startProgress(0);
     scheduleNextStep(0);
 
+    const navTimer = setTimeout(() => {
+      setShowNavbar(false);
+    }, 500);
+
+    // Trigger AI analysis
+    const runAnalysis = async () => {
+      if (!rid) return; // Need an ID to analyze
+      try {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resumeId: rid }),
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+          if (data.isValidResume === false) {
+            // Gemini determined this is NOT a valid resume
+            setInvalidReason(data.reason || "This document does not appear to be a resume.");
+            analysisStatusRef.current = "invalid";
+            setAnalysisStatus("invalid");
+            setShowErrorModal(true);
+            clearStepTimer();
+          } else {
+            // Valid resume — store analysis
+            setAnalysisResult(data.analysis);
+            try {
+              localStorage.setItem("quickapply_analysis", JSON.stringify(data.analysis));
+            } catch (_) { /* localStorage full or unavailable — ignore */ }
+            analysisStatusRef.current = "success";
+            setAnalysisStatus("success");
+          }
+        } else {
+          setInvalidReason(data.error || "Analysis failed. Please try again.");
+          analysisStatusRef.current = "error";
+          setAnalysisStatus("error");
+          setShowErrorModal(true);
+          clearStepTimer();
+        }
+      } catch (err) {
+        setInvalidReason("Network error — could not reach the server. Please try again.");
+        analysisStatusRef.current = "error";
+        setAnalysisStatus("error");
+        setShowErrorModal(true);
+        clearStepTimer();
+      }
+    };
+
+    runAnalysis();
+
     return () => {
-      stopProgress();
       clearStepTimer();
+      clearTimeout(navTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rid]);
 
   // ── Pause / resume ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (isPaused) {
-      stopProgress();
       clearStepTimer();
-      pausedProgressRef.current = progress;
     } else {
       if (!isDone) {
-        startProgress(pausedProgressRef.current);
         scheduleNextStep(pausedStepRef.current);
       }
     }
@@ -310,8 +367,9 @@ export default function ProcessingPage() {
     if (!isDone) return;
 
     const timeout = setTimeout(() => {
-      if (isValidResume) {
-        router.push("/score");
+      if (analysisStatus === "success") {
+        const resumeId = rid || localStorage.getItem("quickapply_resume_id") || "";
+        router.push(resumeId ? `/score?rid=${resumeId}` : "/score");
       } else {
         setShowErrorModal(true);
       }
@@ -319,7 +377,7 @@ export default function ProcessingPage() {
 
     return () => clearTimeout(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDone]);
+  }, [isDone, analysisStatus, rid, router]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleCancelClick = () => {
@@ -340,14 +398,83 @@ export default function ProcessingPage() {
     router.push("/upload");
   };
 
+  // Retry analysis (for API errors, not invalid resumes)
+  const handleRetry = () => {
+    setShowErrorModal(false);
+    setInvalidReason("");
+    setAnalysisResult(null);
+    analysisStatusRef.current = "pending";
+    setAnalysisStatus("pending");
+    setCurrentStep(0);
+    setProgress(0);
+    setIsDone(false);
+    pausedStepRef.current = 0;
+    scheduleNextStep(0);
+
+    // Re-trigger analysis
+    (async () => {
+      if (!rid) return;
+      try {
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resumeId: rid }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.isValidResume === false) {
+            setInvalidReason(data.reason || "This document does not appear to be a resume.");
+            analysisStatusRef.current = "invalid";
+            setAnalysisStatus("invalid");
+            setShowErrorModal(true);
+            clearStepTimer();
+          } else {
+            setAnalysisResult(data.analysis);
+            try {
+              localStorage.setItem("quickapply_analysis", JSON.stringify(data.analysis));
+            } catch (_) {}
+            analysisStatusRef.current = "success";
+            setAnalysisStatus("success");
+          }
+        } else {
+          setInvalidReason(data.error || "Analysis failed. Please try again.");
+          analysisStatusRef.current = "error";
+          setAnalysisStatus("error");
+          setShowErrorModal(true);
+          clearStepTimer();
+        }
+      } catch (err) {
+        setInvalidReason("Network error — could not reach the server. Please try again.");
+        analysisStatusRef.current = "error";
+        setAnalysisStatus("error");
+        setShowErrorModal(true);
+        clearStepTimer();
+      }
+    })();
+  };
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen relative flex flex-col bg-[#080808]">
+    <div className="relative min-h-screen">
       <AnimatedBackground />
-      <Navbar />
+      <div className="relative z-10 flex flex-col min-h-screen">
+      <div 
+        style={{ 
+          transform: showNavbar ? 'translateY(0)' : 'translateY(-100%)', 
+          transition: 'transform 600ms ease-in-out' 
+        }}
+      >
+        <Navbar />
+      </div>
 
       {/* Center content */}
-      <div className="flex-1 flex items-center justify-center px-4 py-10">
+      <div 
+        className="flex-1 flex items-center justify-center px-4 py-10"
+        style={{ 
+          marginTop: showNavbar ? '0' : '-80px',
+          transition: 'margin-top 600ms ease-in-out'
+        }}
+      >
         <div className="processing-card w-full max-w-md p-8">
           {/* Scanner icon */}
           <ScannerIcon />
@@ -376,7 +503,7 @@ export default function ProcessingPage() {
                   width: `${progress}%`,
                   background: "linear-gradient(90deg, #7c3aed, #a855f7, #2563eb)",
                   boxShadow: "0 0 12px rgba(168,85,247,0.5)",
-                  transition: "width 100ms linear",
+                  transition: "width 500ms ease-in-out",
                 }}
               />
             </div>
@@ -396,7 +523,22 @@ export default function ProcessingPage() {
       )}
 
       {/* Error Modal */}
-      {showErrorModal && <ErrorModal onBack={handleErrorBack} />}
+      {showErrorModal && (
+        <ErrorModal
+          reason={invalidReason}
+          onBack={handleErrorBack}
+          onRetry={analysisStatus === "error" ? handleRetry : handleErrorBack}
+        />
+      )}
+      </div>
     </div>
+  );
+}
+
+export default function ProcessingPage() {
+  return (
+    <Suspense fallback={null}>
+      <ProcessingPageInner />
+    </Suspense>
   );
 }

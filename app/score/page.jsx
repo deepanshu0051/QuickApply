@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
 
@@ -243,17 +243,192 @@ function ImprovementCard({ item }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-export default function ScorePage() {
+function ScorePageInner() {
   const router = useRouter();
-  const data = demoResumeScore;
+  const searchParams = useSearchParams();
+  const [showNavbar, setShowNavbar] = useState(true);
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Read rid from URL, fallback to localStorage
+  const ridParam = searchParams.get("rid") || "";
+  const rid = ridParam || (typeof window !== "undefined" ? localStorage.getItem("quickapply_resume_id") : "") || "";
+
+  useEffect(() => {
+    if (rid && typeof window !== "undefined") {
+      localStorage.setItem("quickapply_resume_id", rid);
+    }
+  }, [rid]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowNavbar(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        let analysisData = null;
+        let originalName = null;
+
+        // Try local storage first
+        if (typeof window !== "undefined") {
+          const localAnalysis = localStorage.getItem("quickapply_analysis");
+          if (localAnalysis) {
+            try {
+              analysisData = JSON.parse(localAnalysis);
+            } catch (e) {}
+          }
+        }
+
+        // If not in local storage or we need original_name, fetch from API
+        if (!analysisData || !originalName) {
+          if (!rid) {
+            throw new Error("No resume ID found");
+          }
+          const res = await fetch(`/api/resume?id=${rid}`);
+          const json = await res.json();
+          
+          if (!res.ok || !json.success || !json.resume) {
+            throw new Error("Analysis not found in database");
+          }
+          
+          if (json.resume.analysis) {
+            analysisData = typeof json.resume.analysis === 'string' ? JSON.parse(json.resume.analysis) : json.resume.analysis;
+          }
+          originalName = json.resume.original_name;
+        }
+
+        if (!analysisData) {
+          throw new Error("Could not load analysis");
+        }
+
+        // Fallback for extractedSkills property used by the Gemini prompt
+        const skillsArray = Array.isArray(analysisData.skills) ? analysisData.skills : (Array.isArray(analysisData.extractedSkills) ? analysisData.extractedSkills : []);
+
+        // Clean up name
+        let name = "Unknown";
+        if (analysisData.name && analysisData.name !== "Unknown") {
+          name = analysisData.name;
+        } else if (originalName) {
+          name = originalName.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+          name = name.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+        }
+
+        // Role title
+        let role = "Resume Analysis";
+        if (analysisData.role && analysisData.role !== "Unknown") {
+          role = analysisData.role;
+        }
+
+        // Construct final data object
+        const finalData = {
+          score: analysisData.score || 0,
+          rating: analysisData.rating || "Good",
+          name: name !== "Unknown" ? name : "",
+          role: role,
+          strengths: Array.isArray(analysisData.strengths) ? analysisData.strengths : [],
+          improvements: Array.isArray(analysisData.improvements) ? analysisData.improvements : [],
+          skills: skillsArray,
+          missingSections: Array.isArray(analysisData.missingSections) ? analysisData.missingSections : []
+        };
+        
+        setData(finalData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, [rid]);
+
+  if (loading) {
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+        <AnimatedBackground />
+        <div className="relative z-10 flex flex-col min-h-screen items-center justify-center p-4">
+          <div
+            className="rounded-2xl p-8 max-w-sm w-full flex flex-col items-center justify-center text-center gap-4"
+            style={{
+              background: "rgba(14,14,24,0.72)",
+              backdropFilter: "blur(40px)",
+              WebkitBackdropFilter: "blur(40px)",
+              border: "1px solid rgba(139,92,246,0.30)",
+              boxShadow: "0 20px 70px rgba(0,0,0,0.75), 0 0 60px rgba(139,92,246,0.10)",
+            }}
+          >
+            <svg className="w-8 h-8 text-[#a855f7] animate-spin mb-2" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+              <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <p className="text-white font-semibold">Loading your analysis...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="relative min-h-screen overflow-hidden">
+        <AnimatedBackground />
+        <div className="relative z-10 flex flex-col min-h-screen items-center justify-center p-4">
+          <div
+            className="rounded-2xl p-8 max-w-sm w-full text-center"
+            style={{
+              background: "rgba(14,14,24,0.72)",
+              backdropFilter: "blur(40px)",
+              WebkitBackdropFilter: "blur(40px)",
+              border: "1px solid rgba(239,68,68,0.35)",
+              boxShadow: "0 20px 70px rgba(0,0,0,0.75), 0 0 60px rgba(239,68,68,0.10)",
+            }}
+          >
+            <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center mb-4" style={{ background: "rgba(239,68,68,0.15)" }}>
+              <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6 stroke-[#ef4444]" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Could not load analysis</h2>
+            <p className="text-sm text-[rgba(255,255,255,0.50)] mb-6">We couldn't fetch your resume analysis. It might have expired or wasn't analyzed yet.</p>
+            <button
+              onClick={() => router.push("/upload")}
+              className="w-full py-2.5 rounded-xl font-semibold text-white transition-all duration-300 hover:-translate-y-0.5"
+              style={{ background: "#a855f7" }}
+            >
+              Upload Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const ratingConfig = getRatingConfig(data.score);
 
   return (
-    <div className="min-h-screen relative flex flex-col bg-[#080808]">
+    <div className="relative min-h-screen overflow-hidden">
       <AnimatedBackground />
-      <Navbar />
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <div
+          className="absolute top-0 left-0 right-0 z-50"
+          style={{
+            transform: showNavbar ? 'translateY(0)' : 'translateY(-100%)',
+            transition: 'transform 600ms ease-in-out'
+          }}
+        >
+          <Navbar />
+        </div>
 
-      <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8 space-y-6">
+      <main 
+        className="flex-1 w-full max-w-2xl mx-auto px-4 pb-8 space-y-6"
+        style={{
+          paddingTop: showNavbar ? '80px' : '32px',
+          transition: 'padding-top 600ms ease-in-out'
+        }}
+      >
 
         {/* ── 1. Header ─────────────────────────────────────────────────────── */}
         <FadeSection delay={0}>
@@ -307,7 +482,7 @@ export default function ScorePage() {
               </div>
 
               {/* Name + Role */}
-              <p className="mt-3 text-base font-semibold text-white">{data.name}</p>
+              {data.name && <p className="mt-3 text-base font-semibold text-white">{data.name}</p>}
               <p className="text-sm text-[rgba(255,255,255,0.45)]">{data.role}</p>
             </div>
 
@@ -317,19 +492,19 @@ export default function ScorePage() {
             {/* Stat pills */}
             <div className="flex flex-wrap justify-center gap-3">
               <StatPill
-                label={`${data.extractedSkills.length} Skills Found`}
+                label={`${data.skills.length} Skills Found`}
                 color="#a855f7"
                 bg="rgba(168,85,247,0.10)"
                 border="rgba(168,85,247,0.35)"
               />
               <StatPill
-                label={`${data.completedSections}/${data.totalSections} Sections`}
+                label={`${6 - data.missingSections.length}/6 Sections OK`}
                 color="#3b82f6"
                 bg="rgba(59,130,246,0.10)"
                 border="rgba(59,130,246,0.35)"
               />
               <StatPill
-                label={`${data.experience} Exp`}
+                label={`${data.improvements.length} Issues Found`}
                 color="#8b5cf6"
                 bg="rgba(139,92,246,0.10)"
                 border="rgba(139,92,246,0.35)"
@@ -339,89 +514,95 @@ export default function ScorePage() {
         </FadeSection>
 
         {/* ── 3. Strengths ──────────────────────────────────────────────────── */}
-        <FadeSection delay={200}>
-          <SectionTitle>✅ What&apos;s Working Well</SectionTitle>
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: "rgba(14,24,18,0.70)",
-              backdropFilter: "blur(32px)",
-              WebkitBackdropFilter: "blur(32px)",
-              border: "1px solid rgba(34,197,94,0.25)",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.60), 0 0 30px rgba(34,197,94,0.08)",
-            }}
-          >
-            <div className="flex flex-col gap-3">
-              {data.strengths.map((s, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div
-                    className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-                    style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.50)" }}
-                  >
-                    <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3">
-                      <path d="M2 6 L5 9 L10 3" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+        {data.strengths && data.strengths.length > 0 && (
+          <FadeSection delay={200}>
+            <SectionTitle>✅ What&apos;s Working Well</SectionTitle>
+            <div
+              className="rounded-2xl p-5"
+              style={{
+                background: "rgba(14,24,18,0.70)",
+                backdropFilter: "blur(32px)",
+                WebkitBackdropFilter: "blur(32px)",
+                border: "1px solid rgba(34,197,94,0.25)",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.60), 0 0 30px rgba(34,197,94,0.08)",
+              }}
+            >
+              <div className="flex flex-col gap-3">
+                {data.strengths.map((s, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div
+                      className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.50)" }}
+                    >
+                      <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3">
+                        <path d="M2 6 L5 9 L10 3" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-[rgba(255,255,255,0.80)] leading-snug">{s}</p>
                   </div>
-                  <p className="text-sm text-[rgba(255,255,255,0.80)] leading-snug">{s}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </FadeSection>
+          </FadeSection>
+        )}
 
         {/* ── 4. Improvements ───────────────────────────────────────────────── */}
-        <FadeSection delay={300}>
-          <SectionTitle>⚠️ Areas to Improve</SectionTitle>
-          <p className="text-xs text-[rgba(255,255,255,0.35)] mb-3 -mt-2">
-            Click a card to see how to fix it
-          </p>
-          <div className="flex flex-col gap-3">
-            {data.improvements.map((item) => (
-              <ImprovementCard key={item.id} item={item} />
-            ))}
-          </div>
-        </FadeSection>
-
-        {/* ── 5. Extracted Skills ───────────────────────────────────────────── */}
-        <FadeSection delay={400}>
-          <SectionTitle>🛠️ Extracted Skills</SectionTitle>
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: "rgba(14,14,24,0.65)",
-              backdropFilter: "blur(32px)",
-              WebkitBackdropFilter: "blur(32px)",
-              border: "1px solid rgba(139,92,246,0.22)",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.55), 0 0 24px rgba(139,92,246,0.07)",
-            }}
-          >
-            <div className="flex flex-wrap gap-2">
-              {data.extractedSkills.map((skill) => (
-                <span
-                  key={skill}
-                  className="px-3 py-1.5 rounded-full text-sm font-semibold cursor-default
-                    transition-all duration-300 hover:scale-105"
-                  style={{
-                    background: "rgba(139,92,246,0.12)",
-                    border: "1px solid rgba(139,92,246,0.40)",
-                    color: "#c4b5fd",
-                    boxShadow: "0 0 0 rgba(139,92,246,0)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = "0 0 14px rgba(139,92,246,0.40)";
-                    e.currentTarget.style.background = "rgba(139,92,246,0.22)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = "0 0 0 rgba(139,92,246,0)";
-                    e.currentTarget.style.background = "rgba(139,92,246,0.12)";
-                  }}
-                >
-                  {skill}
-                </span>
+        {data.improvements && data.improvements.length > 0 && (
+          <FadeSection delay={300}>
+            <SectionTitle>⚠️ Areas to Improve</SectionTitle>
+            <p className="text-xs text-[rgba(255,255,255,0.35)] mb-3 -mt-2">
+              Click a card to see how to fix it
+            </p>
+            <div className="flex flex-col gap-3">
+              {data.improvements.map((item, idx) => (
+                <ImprovementCard key={item.id || idx} item={item} />
               ))}
             </div>
-          </div>
-        </FadeSection>
+          </FadeSection>
+        )}
+
+        {/* ── 5. Extracted Skills ───────────────────────────────────────────── */}
+        {data.skills && data.skills.length > 0 && (
+          <FadeSection delay={400}>
+            <SectionTitle>🛠️ Extracted Skills</SectionTitle>
+            <div
+              className="rounded-2xl p-5"
+              style={{
+                background: "rgba(14,14,24,0.65)",
+                backdropFilter: "blur(32px)",
+                WebkitBackdropFilter: "blur(32px)",
+                border: "1px solid rgba(139,92,246,0.22)",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.55), 0 0 24px rgba(139,92,246,0.07)",
+              }}
+            >
+              <div className="flex flex-wrap gap-2">
+                {data.skills.map((skill, idx) => (
+                  <span
+                    key={`${skill}-${idx}`}
+                    className="px-3 py-1.5 rounded-full text-sm font-semibold cursor-default
+                      transition-all duration-300 hover:scale-105"
+                    style={{
+                      background: "rgba(139,92,246,0.12)",
+                      border: "1px solid rgba(139,92,246,0.40)",
+                      color: "#c4b5fd",
+                      boxShadow: "0 0 0 rgba(139,92,246,0)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = "0 0 14px rgba(139,92,246,0.40)";
+                      e.currentTarget.style.background = "rgba(139,92,246,0.22)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = "0 0 0 rgba(139,92,246,0)";
+                      e.currentTarget.style.background = "rgba(139,92,246,0.12)";
+                    }}
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </FadeSection>
+        )}
 
         {/* ── 6. Action Buttons ─────────────────────────────────────────────── */}
         <FadeSection delay={500}>
@@ -435,11 +616,11 @@ export default function ScorePage() {
               boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
             }}
           >
-            <div className="flex flex-col sm:flex-row gap-3">
-              {/* Fix Issues */}
+            <div className="flex flex-col gap-3">
+              {/* Find Jobs */}
               <button
-                onClick={() => router.push("/editor")}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl
+                onClick={() => router.push(rid ? `/jobs?rid=${rid}` : "/jobs")}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
                   text-white text-sm font-semibold transition-all duration-300
                   hover:-translate-y-1"
                 style={{
@@ -453,55 +634,28 @@ export default function ScorePage() {
                   e.currentTarget.style.boxShadow = "0 4px 20px rgba(124,58,237,0.35)";
                 }}
               >
+                Find Jobs
                 <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                  <path d="M11.5 2.5 L13.5 4.5 L5 13 L2 14 L3 11 Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M9.5 4.5 L11.5 6.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                Fix Issues
-              </button>
-
-              {/* Skip & Find Jobs */}
-              <button
-                onClick={() => router.push("/jobs")}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl
-                  text-sm font-semibold transition-all duration-300
-                  hover:-translate-y-1"
-                style={{
-                  border: "1px solid rgba(139,92,246,0.50)",
-                  color: "#a855f7",
-                  background: "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(139,92,246,0.14)";
-                  e.currentTarget.style.boxShadow = "0 8px 28px rgba(139,92,246,0.22)";
-                  e.currentTarget.style.borderColor = "rgba(168,85,247,0.70)";
-                  e.currentTarget.style.color = "#c4b5fd";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.boxShadow = "none";
-                  e.currentTarget.style.borderColor = "rgba(139,92,246,0.50)";
-                  e.currentTarget.style.color = "#a855f7";
-                }}
-              >
-                Skip &amp; Find Jobs
-                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
-                  <path d="M3 8 H13 M9 4 L13 8 L9 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M3 8 H13 M9 4 L13 8 L9 12" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
             </div>
-
-            {/* Hint text */}
-            <p className="text-center text-xs text-[rgba(255,255,255,0.30)] mt-3">
-              Fixing issues improves your job match score
-            </p>
           </div>
         </FadeSection>
 
         {/* Bottom spacer */}
         <div className="h-4" />
       </main>
+      </div>
     </div>
+  );
+}
+
+export default function ScorePage() {
+  return (
+    <Suspense fallback={null}>
+      <ScorePageInner />
+    </Suspense>
   );
 }
 

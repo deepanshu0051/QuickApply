@@ -2,17 +2,62 @@
 
 export default function AnimatedBackground() {
   return (
-    <div className="fixed inset-0 -z-10 pointer-events-none bg-[#050505] overflow-hidden">
-      {/* Star Grid Layers */}
-      <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,1)_1px,transparent_1px)] bg-[size:24px_24px] star-layer-1 pointer-events-none"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,1)_1px,transparent_1px)] bg-[length:48px_48px] bg-[position:12px_12px] star-layer-2 pointer-events-none"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,1)_1px,transparent_1px)] bg-[length:72px_72px] bg-[position:36px_0] star-layer-3 pointer-events-none"></div>
+    <div
+      className="fixed top-0 left-0 w-[100vw] h-[100vh] pointer-events-none overflow-hidden"
+      style={{ zIndex: 0, background: "#080808" }}
+    >
+      {/* ── Dot Grid Pattern ── */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle, rgba(255,255,255,0.18) 1.5px, transparent 1.5px),
+            radial-gradient(circle, rgba(255,255,255,0.08) 1.5px, transparent 1.5px),
+            radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)
+          `,
+          backgroundSize: '32px 32px, 32px 32px, 48px 48px',
+          backgroundPosition: '0 0, 16px 16px, 8px 24px',
+        }}
+      />
+
+      {/* ── Blinking Stars ── */}
+      <div 
+        className="absolute inset-0 pointer-events-none animate-pulse"
+        style={{
+          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.20) 1px, transparent 1px)",
+          backgroundSize: "120px 120px",
+          backgroundPosition: "60px 60px",
+          animationDuration: "6s",
+        }}
+      />
       
-      {/* Bottom-left Blob */}
-      <div className="absolute -bottom-1/4 -left-1/4 w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] rounded-full bg-gradient-to-tr from-[#7c3aed] via-[#6366f1] to-[#3b82f6] opacity-30 blur-[100px] animate-blob-float-1 mix-blend-screen"></div>
+      {/* ── Purple Blob (Left) ── */}
+      <div 
+        className="absolute rounded-full pointer-events-none animate-blob-float-1"
+        style={{
+          width: "500px",
+          height: "500px",
+          background: "radial-gradient(circle, rgba(124, 58, 237, 0.20) 0%, transparent 70%)",
+          filter: "blur(130px)",
+          top: "10%",
+          left: "-10%",
+          opacity: 0.20
+        }}
+      />
       
-      {/* Top-right Blob */}
-      <div className="absolute -top-1/4 -right-1/4 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] rounded-full bg-gradient-to-bl from-[#a855f7] via-[#6366f1] to-[#3b82f6] opacity-25 blur-[100px] animate-blob-float-2 mix-blend-screen"></div>
+      {/* ── Blue Blob (Right) ── */}
+      <div 
+        className="absolute rounded-full pointer-events-none animate-blob-float-2"
+        style={{
+          width: "450px",
+          height: "450px",
+          background: "radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 70%)",
+          filter: "blur(130px)",
+          bottom: "10%",
+          right: "-5%",
+          opacity: 0.15
+        }}
+      />
     </div>
   );
 }

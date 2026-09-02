@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 
 // Initialize Supabase admin client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -49,27 +49,41 @@ export async function POST(request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Verify magic bytes (25 50 44 46) for PDF
-    // PDF files start with %PDF- which in hex is 25 50 44 46
-    if (buffer.length < 4 || buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) {
+    // Verify magic bytes (%PDF-) for PDF
+    // PDF files start with %PDF- (hex 25 50 44 46 2D) but can have up to 1024 bytes before the header
+    const headerString = buffer.toString('utf8', 0, Math.min(buffer.length, 1024));
+    if (!headerString.includes('%PDF-')) {
       return NextResponse.json(
         { success: false, error: 'Invalid PDF file format' },
         { status: 400 }
       );
     }
 
-    // 2. Extract Text
+    // 2. Extract Text (pdf-parse v2 API)
     let extractedText = '';
+    let parser = null;
     try {
-      const pdfData = await pdfParse(buffer);
-      extractedText = pdfData.text;
+      const uint8Array = new Uint8Array(arrayBuffer);
+      parser = new PDFParse({ data: uint8Array });
+      const result = await parser.getText();
+      extractedText = result.text;
     } catch (error) {
-      console.error('PDF parsing error:', error);
+      console.error('PDF parsing error details:', error);
       return NextResponse.json(
-        { success: false, error: 'Failed to extract text from PDF' },
+        { success: false, error: 'Failed to extract text from PDF', details: error.message },
         { status: 400 }
       );
+    } finally {
+      if (parser) {
+        await parser.destroy().catch(() => {});
+      }
     }
+
+    // Sanitize extracted text to remove null bytes and invalid control characters
+    // Postgres text/jsonb columns cannot store \u0000 or certain control sequences
+    const sanitizedText = extractedText
+      .replace(/\u0000/g, '')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
 
     // 3. Supabase Operations
     const id = crypto.randomUUID();
@@ -80,21 +94,20 @@ export async function POST(request) {
     const { data: storageData, error: storageError } = await supabase
       .storage
       .from('resumes')
-      .upload(filename, buffer, {
+      .upload(filename, file, {
         contentType: 'application/pdf',
         upsert: false
       });
 
     if (storageError) {
-      console.error('Storage upload error:', storageError);
+      console.error('Storage upload error details:', storageError);
       return NextResponse.json(
-        { success: false, error: 'Failed to upload file to storage' },
+        { success: false, error: 'Failed to upload file to storage', details: storageError.message || JSON.stringify(storageError) },
         { status: 500 }
       );
     }
 
     // Save metadata to database
-    // Assuming 'quickapply.resumes' means the table is called 'resumes'
     const { error: dbError } = await supabase
       .from('resumes')
       .insert({
@@ -104,19 +117,19 @@ export async function POST(request) {
         mime_type: 'application/pdf',
         size_bytes: file.size,
         created_at: new Date().toISOString(),
-        extracted_text: extractedText,
+        extracted_text: sanitizedText,
         skills: null,
         analysis: null
       });
 
     if (dbError) {
-      console.error('Database insert error:', dbError);
+      console.error('Database insert error details:', dbError);
       
       // Attempt cleanup of storage if DB insert fails
       await supabase.storage.from('resumes').remove([filename]);
       
       return NextResponse.json(
-        { success: false, error: 'Failed to save resume metadata' },
+        { success: false, error: "Failed to process this file. Please make sure it's a valid PDF resume." },
         { status: 500 }
       );
     }
