@@ -31,8 +31,14 @@ export default function Navbar() {
           
           {/* Right side */}
           <div className="hidden md:flex items-center gap-6">
-            <Link href="/#how-it-works" scroll={false} className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide tracking-wide">
+            <Link href="/#how-it-works" scroll={false} className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide">
               How it Works
+            </Link>
+            <Link href="/terms" className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide">
+              Terms & Conditions
+            </Link>
+            <Link href="/refund-policy" className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide">
+              Refund Policy
             </Link>
             <Link href="/upload" className="bg-[#f5f5f5] text-black font-semibold rounded-full px-5 py-2 text-sm hover:-translate-y-0.5 hover:bg-white transition-all">
               Upload Resume

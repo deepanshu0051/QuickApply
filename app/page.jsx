@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import { useState, useEffect } from "react";
@@ -52,6 +53,12 @@ export default function Home() {
               <button onClick={() => setShowModal(true)} className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide cursor-pointer">
                 How it Works
               </button>
+              <Link href="/terms" className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide">
+                Terms & Conditions
+              </Link>
+              <Link href="/refund-policy" className="text-sm text-[#a1a1aa] hover:text-white transition tracking-wide">
+                Refund Policy
+              </Link>
               <Link href="/upload" className="bg-[#f5f5f5] text-black font-semibold rounded-full px-5 py-2 text-sm hover:-translate-y-0.5 hover:bg-white transition-all">
                 Upload Resume
               </Link>
@@ -73,6 +80,7 @@ export default function Home() {
         
         {/* Hero Section */}
         <section className="text-center max-w-3xl mx-auto mb-8 md:mb-10">
+          <Image src="/logo.png?v=3" alt="QuickApply Logo" width={64} height={64} className="mx-auto mb-4" unoptimized />
           <h1 className="text-5xl md:text-6xl font-bold text-[#f5f5f5] mb-4 tracking-tight">
             QuickApply
           </h1>

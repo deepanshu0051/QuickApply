@@ -29,9 +29,9 @@ const MIN_TEXT_LENGTH = 50;
 
 // Models to try in order — each has its own separate quota pool
 const MODELS = [
+  'gemini-3.5-flash',
   'gemini-3.6-flash',
-  'gemini-3.6-pro',
-  'gemini-3.6-flash-lite',
+  'gemini-3.5-flash-lite',
 ];
 
 const MAX_RETRIES = 2;
@@ -42,7 +42,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Helper: check if error is a 429 rate-limit error
 function isRateLimitError(error) {
   const msg = (error?.message || '').toLowerCase();
-  return msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota');
+  return msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('503') || msg.includes('unavailable') || msg.includes('high demand');
 }
 
 // Helper: check if error is an auth/model not found error
@@ -265,8 +265,13 @@ ${text}
       let statusCode = 500;
       
       if (isQuota) {
-        errorMessage = 'AI quota exceeded — please wait a minute and try again';
-        statusCode = 429;
+        if (geminiError?.message?.toLowerCase().includes('503') || geminiError?.message?.toLowerCase().includes('high demand') || geminiError?.message?.toLowerCase().includes('unavailable')) {
+          errorMessage = 'AI model is experiencing high demand — please wait a moment and try again';
+          statusCode = 503;
+        } else {
+          errorMessage = 'AI quota exceeded — please wait a minute and try again';
+          statusCode = 429;
+        }
       } else if (isAuth) {
         errorMessage = 'Invalid Gemini API key or lack of model permissions. Please check your .env.local file.';
         statusCode = 401; // Return 401 so the frontend knows it's an auth error

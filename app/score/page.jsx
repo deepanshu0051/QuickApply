@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import AnimatedBackground from "@/components/AnimatedBackground";
 
@@ -69,9 +70,9 @@ function getRatingConfig(score) {
 }
 
 function getPriorityConfig(priority) {
-  if (priority === "high")   return { dot: "🔴", label: "High",   border: "#ef4444", text: "#f87171", bg: "rgba(239,68,68,0.06)" };
-  if (priority === "medium") return { dot: "🟡", label: "Medium", border: "#f59e0b", text: "#fbbf24", bg: "rgba(245,158,11,0.06)" };
-  return                            { dot: "🟢", label: "Low",    border: "#22c55e", text: "#4ade80", bg: "rgba(34,197,94,0.06)" };
+  if (priority === "high")   return { dot: <svg width="12" height="12" viewBox="0 0 24 24" fill="#ef4444"><circle cx="12" cy="12" r="10"/></svg>, label: "High",   border: "#ef4444", text: "#f87171", bg: "rgba(239,68,68,0.06)" };
+  if (priority === "medium") return { dot: <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><circle cx="12" cy="12" r="10"/></svg>, label: "Medium", border: "#f59e0b", text: "#fbbf24", bg: "rgba(245,158,11,0.06)" };
+  return                            { dot: <svg width="12" height="12" viewBox="0 0 24 24" fill="#22c55e"><circle cx="12" cy="12" r="10"/></svg>, label: "Low",    border: "#22c55e", text: "#4ade80", bg: "rgba(34,197,94,0.06)" };
 }
 
 // ── Animated Score Ring ────────────────────────────────────────────────────────
@@ -231,8 +232,9 @@ function ImprovementCard({ item }) {
             }}
           >
             <div className="mt-3 pt-3 border-t border-[rgba(255,255,255,0.07)]">
-              <p className="text-sm text-[#a855f7] italic leading-relaxed">
-                💡 {item.fix}
+              <p className="text-sm text-[#a855f7] italic leading-relaxed inline-flex items-start gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2v1"/><path d="M12 7a5 5 0 100 10h-2z"/></svg>
+                {item.fix}
               </p>
             </div>
           </div>
@@ -251,6 +253,92 @@ function ScorePageInner() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Cleanup overflow on unmount
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
+  }, []);
+
+  const handlePayment = async () => {
+    const resumeId = rid;
+    if (!resumeId) {
+      router.push("/jobs");
+      return;
+    }
+
+    if (!window.Razorpay) {
+      await new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = resolve;
+        document.body.appendChild(script);
+      });
+    }
+
+    try {
+      const res = await fetch("/api/pay/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeId })
+      });
+      const data = await res.json();
+      
+      if (!data.success) {
+        alert(data.error || "Failed to create order");
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: data.amount,
+        currency: data.currency,
+        order_id: data.orderId,
+        name: "QuickApply",
+        description: "Find Matching Jobs",
+        handler: async function (response) {
+          const verifyRes = await fetch("/api/pay/verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resumeId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature
+            })
+          });
+          const verifyData = await verifyRes.json();
+          if (verifyData.success) {
+            sessionStorage.setItem("quickapply_access_token", verifyData.accessToken);
+            router.push(`/jobs?rid=${resumeId}`);
+          } else {
+            alert(verifyData.error || "Payment verification failed");
+          }
+        },
+        theme: {
+          color: "#7c3aed"
+        },
+        modal: {
+          ondismiss: function () {
+            document.body.style.overflow = "";
+            document.documentElement.style.overflow = "";
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", function (response) {
+        alert(response.error.description);
+      });
+      rzp.open();
+
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong");
+    }
+  };
 
   // Read rid from URL, fallback to localStorage
   const ridParam = searchParams.get("rid") || "";
@@ -434,7 +522,7 @@ function ScorePageInner() {
         <FadeSection delay={0}>
           <div className="flex items-center gap-3 mb-1">
             <button
-              onClick={() => router.push("/processing")}
+              onClick={() => router.push("/upload")}
               className="flex items-center justify-center w-9 h-9 rounded-xl border border-[rgba(255,255,255,0.10)]
                 bg-[rgba(255,255,255,0.04)] text-[rgba(255,255,255,0.65)] hover:text-white
                 hover:border-[rgba(139,92,246,0.50)] hover:bg-[rgba(139,92,246,0.10)]
@@ -516,7 +604,12 @@ function ScorePageInner() {
         {/* ── 3. Strengths ──────────────────────────────────────────────────── */}
         {data.strengths && data.strengths.length > 0 && (
           <FadeSection delay={200}>
-            <SectionTitle>✅ What&apos;s Working Well</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                What&apos;s Working Well
+              </span>
+            </SectionTitle>
             <div
               className="rounded-2xl p-5"
               style={{
@@ -534,8 +627,8 @@ function ScorePageInner() {
                       className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
                       style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.50)" }}
                     >
-                      <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3">
-                        <path d="M2 6 L5 9 L10 3" stroke="#4ade80" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
                       </svg>
                     </div>
                     <p className="text-sm text-[rgba(255,255,255,0.80)] leading-snug">{s}</p>
@@ -549,7 +642,12 @@ function ScorePageInner() {
         {/* ── 4. Improvements ───────────────────────────────────────────────── */}
         {data.improvements && data.improvements.length > 0 && (
           <FadeSection delay={300}>
-            <SectionTitle>⚠️ Areas to Improve</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#facc15" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Areas to Improve
+              </span>
+            </SectionTitle>
             <p className="text-xs text-[rgba(255,255,255,0.35)] mb-3 -mt-2">
               Click a card to see how to fix it
             </p>
@@ -564,7 +662,12 @@ function ScorePageInner() {
         {/* ── 5. Extracted Skills ───────────────────────────────────────────── */}
         {data.skills && data.skills.length > 0 && (
           <FadeSection delay={400}>
-            <SectionTitle>🛠️ Extracted Skills</SectionTitle>
+            <SectionTitle>
+              <span className="inline-flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                Extracted Skills
+              </span>
+            </SectionTitle>
             <div
               className="rounded-2xl p-5"
               style={{
@@ -619,7 +722,7 @@ function ScorePageInner() {
             <div className="flex flex-col gap-3">
               {/* Find Jobs */}
               <button
-                onClick={() => router.push(rid ? `/jobs?rid=${rid}` : "/jobs")}
+                onClick={handlePayment}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
                   text-white text-sm font-semibold transition-all duration-300
                   hover:-translate-y-1"
@@ -634,11 +737,21 @@ function ScorePageInner() {
                   e.currentTarget.style.boxShadow = "0 4px 20px rgba(124,58,237,0.35)";
                 }}
               >
-                Find Jobs
+                Find Jobs — $1
                 <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4">
                   <path d="M3 8 H13 M9 4 L13 8 L9 12" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
+              
+              <div className="text-center mt-1">
+                <p className="text-xs text-[rgba(255,255,255,0.40)]">Personalized job matching • One-time payment • No subscription</p>
+                <p className="text-xs text-[rgba(255,255,255,0.40)] mt-1 font-medium">
+                  100% refundable (<Link href="/terms" className="underline hover:text-[#a855f7] transition-colors">Terms &amp; Conditions</Link> apply) • <Link href="/refund-policy" className="underline hover:text-[#a855f7] transition-colors">Refund Policy</Link>
+                </p>
+                <p className="text-xs text-[rgba(255,255,255,0.30)] mt-1.5 leading-relaxed">
+                  UPI apps may show the merchant/owner name &apos;Deepanshu&apos; during payment — this is our official QuickApply payment account.
+                </p>
+              </div>
             </div>
           </div>
         </FadeSection>

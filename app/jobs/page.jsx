@@ -15,10 +15,8 @@ function getMatchConfig(score) {
   return               { bg: "rgba(100,100,120,0.14)", border: "rgba(100,100,120,0.40)", color: "#9ca3af" };
 }
 
-function getModeIcon(mode) {
-  if (mode === "Remote") return "🏠";
-  if (mode === "Hybrid") return "🔄";
-  return "🏢";
+function getModeIcon() {
+  return null;
 }
 
 function getInitials(company) {
@@ -177,11 +175,11 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
 
         {/* ── Meta Pills ──────────────────────────────────────────── */}
         <div className="flex flex-wrap gap-2">
-          <MetaPill>{`📍 ${job.location}`}</MetaPill>
-          <MetaPill>{`${getModeIcon(job.mode)} ${job.mode}`}</MetaPill>
-          <MetaPill>{`⏰ ${job.type}`}</MetaPill>
-          <span className="text-xs font-semibold text-[#4ade80]">{`💰 ${job.salary}`}</span>
-          <span className="text-xs text-[rgba(255,255,255,0.35)]">{`🕐 ${job.postedAt}`}</span>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>{job.location}</span></MetaPill>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{job.mode}</span></MetaPill>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>{job.type}</span></MetaPill>
+          <span className="text-xs font-semibold text-[#4ade80] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>{job.salary}</span>
+          <span className="text-xs text-[rgba(255,255,255,0.35)] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{job.postedAt}</span>
         </div>
 
         {/* ── Skills ──────────────────────────────────────────────── */}
@@ -303,47 +301,78 @@ function JobsPageInner() {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [activeScoreTab, setActiveScoreTab] = useState("score");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   // Visibility for entrance animations
   const [headerVisible, setHeaderVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
 
   const toastTimerRef = useRef(null);
+  const refreshErrorTimerRef = useRef(null);
 
-  useEffect(() => {
-    async function loadJobs() {
-      try {
-        let query = "Software Developer";
-        
-        // Try to get role from resume analysis if rid exists
-        if (rid && typeof window !== "undefined") {
-          const localAnalysis = localStorage.getItem("quickapply_analysis");
-          if (localAnalysis) {
-            try {
-              const analysis = JSON.parse(localAnalysis);
-              if (analysis.role && analysis.role !== "Unknown") {
-                query = analysis.role;
-              }
-            } catch (e) {}
-          }
+  // ── Shared fetch logic ────────────────────────────────────────────────────
+  const fetchJobs = useCallback(async ({ isRefresh = false } = {}) => {
+    try {
+      let query = "Software Developer";
+      if (typeof window !== "undefined") {
+        const localAnalysis = localStorage.getItem("quickapply_analysis");
+        if (localAnalysis) {
+          try {
+            const analysis = JSON.parse(localAnalysis);
+            if (analysis.role && analysis.role !== "Unknown") query = analysis.role;
+          } catch (e) {}
         }
-
-        const res = await fetch(`/api/jobs?query=${encodeURIComponent(query)}`);
-        const json = await res.json();
-        
-        if (!res.ok || !json.success) {
-          throw new Error(json.error || "Failed to fetch jobs");
-        }
-        
-        setJobs(json.jobs || []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
       }
+
+      const token = sessionStorage.getItem("quickapply_access_token");
+      const res = await fetch(`/api/jobs?query=${encodeURIComponent(query)}&rid=${encodeURIComponent(rid)}`, {
+        headers: { "x-quickapply-access-token": token || "" }
+      });
+
+      if (res.status === 402) {
+        if (isRefresh) {
+          setSessionExpired(true);
+        } else {
+          router.push(`/score?rid=${rid}`);
+        }
+        return;
+      }
+
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || "Failed to fetch jobs");
+
+      setJobs(json.jobs || []);
+      if (isRefresh) {
+        setCurrentPage(1);
+        clearFilters();
+      }
+    } catch (err) {
+      if (isRefresh) {
+        setRefreshError("Refresh failed. Please try again.");
+        if (refreshErrorTimerRef.current) clearTimeout(refreshErrorTimerRef.current);
+        refreshErrorTimerRef.current = setTimeout(() => setRefreshError(""), 3000);
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      if (isRefresh) setIsRefreshing(false);
+      else setLoading(false);
     }
-    loadJobs();
   }, [rid]);
+
+  useEffect(() => { fetchJobs(); }, [rid]);
+
+  const handleRefreshJobs = async () => {
+    setIsRefreshing(true);
+    setRefreshError("");
+    setSessionExpired(false);
+    await fetchJobs({ isRefresh: true });
+  };
 
   // Reset client page to 1 when filters change
   useEffect(() => {
@@ -542,34 +571,6 @@ function JobsPageInner() {
                 QuickApply
               </Link>
             </div>
-            
-            {/* Right side — Home Icon button only */}
-            <div className="flex items-center">
-              <button
-                onClick={() => router.push('/')}
-                title="Go to Home"
-                aria-label="Go to Home"
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  color: "#ffffff",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.15)";
-                  e.currentTarget.style.boxShadow = "0 0 16px rgba(255,255,255,0.20)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 stroke-white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
-                </svg>
-              </button>
-            </div>
           </div>
         </div>
       </nav>
@@ -688,6 +689,99 @@ function JobsPageInner() {
           </div>
         </div>
 
+        {/* ── Navigation Buttons ─────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => { setActiveScoreTab("score"); setShowScoreModal(true); }}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
+            style={{
+              background: "transparent",
+              border: "1px solid rgba(139,92,246,0.50)",
+              color: "#a855f7",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Resume Score
+          </button>
+          <button
+            onClick={handleRefreshJobs}
+            disabled={isRefreshing}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: "rgba(37,99,235,0.15)",
+              border: "1px solid rgba(37,99,235,0.50)",
+              color: "#60a5fa",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+            onMouseEnter={(e) => { if (!isRefreshing) e.currentTarget.style.background = "rgba(37,99,235,0.25)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(37,99,235,0.15)"; }}
+          >
+            {isRefreshing ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                  <path d="M12 2 A10 10 0 0 1 22 12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                Refreshing...
+              </>
+            ) : (
+              <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Refresh Jobs</>
+            )}
+          </button>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
+            style={{
+              background: "rgba(239,68,68,0.15)",
+              border: "1px solid rgba(239,68,68,0.50)",
+              color: "#f87171",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.25)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.15)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload New Resume
+          </button>
+        </div>
+
+        {/* ── Refresh error / Session expired inline messages ─────────────── */}
+        {refreshError && (
+          <p className="text-sm text-red-400 text-center -mt-2">{refreshError}</p>
+        )}
+        {sessionExpired && (
+          <div
+            className="rounded-xl px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-3"
+            style={{
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.30)",
+            }}
+          >
+            <p className="text-sm text-red-300 text-center sm:text-left">
+              Your session has expired. Please go back to the Score page and find jobs again.
+            </p>
+            <button
+              onClick={() => router.push(`/score?rid=${rid}`)}
+              className="flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer"
+              style={{
+                background: "rgba(139,92,246,0.20)",
+                border: "1px solid rgba(139,92,246,0.50)",
+                color: "#a855f7",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.35)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.20)"; }}
+            >
+              Go to Score →
+            </button>
+          </div>
+        )}
+
         {/* ── 3. Job Cards Grid ─────────────────────────────────────────────── */}
         <div className="relative">
           {displayedJobs.length > 0 ? (
@@ -711,7 +805,7 @@ function JobsPageInner() {
             className="rounded-2xl p-10 text-center"
             style={glassPanel}
           >
-            <div className="text-5xl mb-4">🔍</div>
+            <div className="flex justify-center mb-4"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.40)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
             <p className="text-white font-semibold mb-1">No jobs found matching your filters</p>
             <p className="text-sm text-[rgba(255,255,255,0.40)] mb-5">Try adjusting your search or filters</p>
             <button
@@ -756,38 +850,266 @@ function JobsPageInner() {
           </div>
         )}
 
-        {/* ── 5. Bottom Section ─────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 pb-8">
-          <p className="text-sm text-[rgba(255,255,255,0.35)] w-full text-center sm:w-auto">
-            Showing {filteredJobs.length} of {jobs.length} jobs
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/score")}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-250 hover:-translate-y-0.5"
-              style={{
-                border: "1px solid rgba(139,92,246,0.45)",
-                color: "#a855f7",
-                background: "transparent",
-              }}
-            >
-              ← Resume Score
-            </button>
-            <button
-              onClick={() => router.push("/upload")}
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-250 hover:-translate-y-0.5"
-              style={{
-                border: "1px solid rgba(59,130,246,0.45)",
-                color: "#60a5fa",
-                background: "transparent",
-              }}
-            >
-              Upload New Resume
-            </button>
-          </div>
-        </div>
+
       </main>
       </div>
+
+      {/* ── Upload Warning Modal ────────────────────────────────────────── */}
+      {showUploadModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{
+            background: "rgba(0,0,0,0.85)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            zIndex: 9999,
+          }}
+          onClick={() => setShowUploadModal(false)}
+          onKeyDown={(e) => { if (e.key === "Escape") setShowUploadModal(false); }}
+        >
+          <div
+            className="w-full"
+            style={{
+              maxWidth: "420px",
+              background: "rgba(20,10,10,0.95)",
+              border: "1px solid rgba(239,68,68,0.60)",
+              boxShadow: "0 0 40px rgba(239,68,68,0.30)",
+              borderRadius: "1.25rem",
+              padding: "2rem",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+            <h2 className="text-2xl font-bold text-red-400 text-center mt-3">Are you sure?</h2>
+            <p className="text-sm text-center mt-1" style={{ color: "rgba(252,165,165,0.70)" }}>This action cannot be undone</p>
+            <div className="my-4" style={{ borderTop: "1px solid rgba(127,29,29,0.40)" }} />
+            <p className="text-sm text-gray-300 leading-relaxed">
+              If you upload a new resume, you will be redirected to the Upload page and will need to go through the entire process again — including paying ₹1 to find jobs for your new resume. Your current job results will be lost.
+            </p>
+            <div className="mt-3" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: "0.75rem", padding: "0.75rem 1rem" }}>
+              <p className="text-sm font-medium inline-flex items-center gap-1.5" style={{ color: "#fca5a5" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>You will be charged again for the new resume.</p>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer"
+                style={{ background: "rgba(139,92,246,0.20)", border: "1px solid rgba(139,92,246,0.50)", color: "#a855f7" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.35)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.20)"; }}
+              >
+                No, Keep My Jobs
+              </button>
+              <button
+                onClick={() => router.push("/upload")}
+                className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer"
+                style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.50)", color: "#f87171" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.30)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.15)"; }}
+              >
+                Yes, Upload New Resume
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Resume Score Modal ──────────────────────────────────────────── */}
+      {showScoreModal && (() => {
+        let analysis = null;
+        try {
+          const raw = typeof window !== "undefined" ? localStorage.getItem("quickapply_analysis") : null;
+          if (raw) analysis = JSON.parse(raw);
+        } catch (e) {}
+
+        const score = analysis ? (analysis.score ?? analysis.resumeScore ?? 0) : 0;
+        const scoreColor = score >= 80 ? "#4ade80" : score >= 60 ? "#facc15" : "#f87171";
+        const rating = analysis?.rating || "";
+        const summary = analysis?.summary || "";
+        const strengths = Array.isArray(analysis?.strengths) ? analysis.strengths : [];
+        const improvements = Array.isArray(analysis?.improvements) ? analysis.improvements : [];
+        const skills = Array.isArray(analysis?.skills) ? analysis.skills : (Array.isArray(analysis?.extractedSkills) ? analysis.extractedSkills : []);
+
+        const tabIcons = {
+          score: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+          strengths: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+          improvements: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>,
+          skills: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>,
+        };
+        const tabs = [
+          { id: "score", label: "Score" },
+          { id: "strengths", label: "Strengths" },
+          { id: "improvements", label: "Improvements" },
+          { id: "skills", label: "Skills" },
+        ];
+
+        return (
+          <div
+            className="fixed inset-0 flex items-center justify-center p-4"
+            style={{
+              background: "rgba(0,0,0,0.80)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              zIndex: 9999,
+            }}
+            onClick={() => setShowScoreModal(false)}
+            onKeyDown={(e) => { if (e.key === "Escape") setShowScoreModal(false); }}
+          >
+            <div
+              className="relative w-[90%] overflow-y-auto"
+              style={{
+                maxWidth: "560px",
+                maxHeight: "85vh",
+                background: "rgba(20,20,30,0.95)",
+                border: "1px solid rgba(139,92,246,0.45)",
+                boxShadow: "0 0 50px rgba(139,92,246,0.20)",
+                borderRadius: "1.5rem",
+                padding: "2rem",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setShowScoreModal(false)}
+                className="absolute top-4 right-4 transition-all duration-200 cursor-pointer"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: "0.5rem",
+                  padding: "0.25rem 0.5rem",
+                  color: "#9ca3af",
+                  lineHeight: 1,
+                  fontSize: "1.1rem",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.10)"; e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.color = "#9ca3af"; }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+
+              {/* Header */}
+              <h2 className="text-xl font-bold text-white pr-10">Your Resume Analysis</h2>
+              <p className="text-sm mt-1" style={{ color: "rgba(216,180,254,0.70)" }}>AI-powered insights from your resume</p>
+
+              {/* Tab bar */}
+              <div className="flex flex-wrap gap-2 mt-4 mb-5">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveScoreTab(tab.id)}
+                    className="px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer"
+                    style={{
+                      background: activeScoreTab === tab.id ? "rgba(139,92,246,0.30)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${activeScoreTab === tab.id ? "rgba(139,92,246,0.60)" : "rgba(255,255,255,0.08)"}`,
+                      color: activeScoreTab === tab.id ? "#a855f7" : "#6b7280",
+                    }}
+                    onMouseEnter={(e) => { if (activeScoreTab !== tab.id) { e.currentTarget.style.color = "#9ca3af"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; } }}
+                    onMouseLeave={(e) => { if (activeScoreTab !== tab.id) { e.currentTarget.style.color = "#6b7280"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; } }}
+                  >
+                    <span className="inline-flex items-center gap-1.5">{tabIcons[tab.id]}{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* No data fallback */}
+              {!analysis && (
+                <p className="text-sm text-center py-8" style={{ color: "rgba(255,255,255,0.45)" }}>
+                  Score data not available. Please re-upload your resume.
+                </p>
+              )}
+
+              {/* Tab: Score */}
+              {analysis && activeScoreTab === "score" && (
+                <div className="flex flex-col items-center">
+                  <span className="text-6xl font-bold" style={{ color: scoreColor }}>{score}</span>
+                  {rating && <p className="text-lg font-semibold mt-2" style={{ color: "#d8b4fe" }}>{rating}</p>}
+                  {summary && <p className="text-sm text-center mt-2 px-4" style={{ color: "#9ca3af" }}>{summary}</p>}
+                  <div className="mt-4 w-full" style={{ height: "0.75rem", borderRadius: "9999px", background: "rgba(255,255,255,0.08)" }}>
+                    <div
+                      style={{
+                        width: `${Math.min(score, 100)}%`,
+                        height: "100%",
+                        borderRadius: "9999px",
+                        background: "linear-gradient(90deg,#7c3aed,#2563eb)",
+                        transition: "width 0.8s ease",
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.30)" }}>{score} / 100</p>
+                </div>
+              )}
+
+              {/* Tab: Strengths */}
+              {analysis && activeScoreTab === "strengths" && (
+                <div>
+                  {strengths.length === 0 && <p className="text-sm py-4" style={{ color: "rgba(255,255,255,0.40)" }}>No strengths data found.</p>}
+                  {strengths.map((s, i) => (
+                    <div
+                      key={i}
+                      className="mb-2"
+                      style={{
+                        background: "rgba(74,222,128,0.08)",
+                        border: "1px solid rgba(74,222,128,0.20)",
+                        borderRadius: "0.75rem",
+                        padding: "0.75rem 1rem",
+                      }}
+                    >
+                      <p className="text-sm inline-flex items-center gap-1.5" style={{ color: "#86efac" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>{s}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tab: Improvements */}
+              {analysis && activeScoreTab === "improvements" && (
+                <div>
+                  {improvements.length === 0 && <p className="text-sm py-4" style={{ color: "rgba(255,255,255,0.40)" }}>No improvements data found.</p>}
+                  {improvements.map((item, i) => {
+                    const text = typeof item === "string" ? item : (item.issue || item.fix || item.section || JSON.stringify(item));
+                    return (
+                      <div
+                        key={i}
+                        className="mb-2"
+                        style={{
+                          background: "rgba(251,191,36,0.08)",
+                          border: "1px solid rgba(251,191,36,0.20)",
+                          borderRadius: "0.75rem",
+                          padding: "0.75rem 1rem",
+                        }}
+                      >
+                        <p className="text-sm inline-flex items-center gap-1.5" style={{ color: "#fde68a" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#facc15" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>{text}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Tab: Skills */}
+              {analysis && activeScoreTab === "skills" && (
+                <div className="flex flex-wrap">
+                  {skills.length === 0 && <p className="text-sm py-4" style={{ color: "rgba(255,255,255,0.40)" }}>No skills data found.</p>}
+                  {skills.map((skill, i) => (
+                    <span
+                      key={`${skill}-${i}`}
+                      className="inline-flex m-1"
+                      style={{
+                        background: "rgba(139,92,246,0.15)",
+                        border: "1px solid rgba(139,92,246,0.35)",
+                        borderRadius: "9999px",
+                        padding: "0.25rem 0.75rem",
+                        color: "#d8b4fe",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -1,9 +1,22 @@
 import { NextResponse } from "next/server";
+import { verifyToken } from "@/lib/paymentToken";
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query") || "Software Developer";
+    const rid = searchParams.get("rid");
+    
+    // Check payment token
+    const token = request.headers.get("x-quickapply-access-token");
+    const payload = verifyToken(token);
+    
+    if (!payload || !rid || payload.rid !== rid) {
+      return NextResponse.json(
+        { success: false, error: "Payment required." },
+        { status: 402 }
+      );
+    }
     
     if (!process.env.RAPIDAPI_KEY) {
       return NextResponse.json(
