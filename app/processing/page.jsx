@@ -217,7 +217,11 @@ function ProcessingPageInner() {
   const searchParams = useSearchParams();
 
   // Read rid from URL query param and persist to localStorage
-  const rid = searchParams.get("rid") || "";
+  let rid = searchParams.get("rid") || "";
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (rid && !UUID_REGEX.test(rid)) {
+    rid = "";
+  }
   useEffect(() => {
     if (rid) {
       localStorage.setItem("quickapply_resume_id", rid);

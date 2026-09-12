@@ -31,10 +31,9 @@ export async function GET(request) {
       );
     }
 
-    // Validate UUID format
     if (!UUID_REGEX.test(id)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid resume ID format' },
+        { success: false, error: 'Invalid resume ID.' },
         { status: 400 }
       );
     }
@@ -47,6 +46,7 @@ export async function GET(request) {
       .single();
 
     if (fetchError || !resume) {
+      console.error('Resume fetch failed:', fetchError || 'Not found');
       return NextResponse.json(
         { success: false, error: 'Resume not found' },
         { status: 404 }
@@ -59,9 +59,9 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error('Resume fetch error:', error.message || 'Unknown error');
+    console.error('Resume fetch error:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch resume' },
+      { success: false, error: 'Something went wrong. Please try again.' },
       { status: 500 }
     );
   }

@@ -270,12 +270,19 @@ function ScorePageInner() {
     }
 
     if (!window.Razorpay) {
-      await new Promise((resolve) => {
+      await new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.async = true;
         script.onload = resolve;
+        script.onerror = reject;
         document.body.appendChild(script);
-      });
+      }).catch(() => {});
+    }
+
+    if (!window.Razorpay) {
+      alert("Payment system failed to load. Please refresh the page and try again.");
+      return;
     }
 
     try {
@@ -341,8 +348,14 @@ function ScorePageInner() {
   };
 
   // Read rid from URL, fallback to localStorage
-  const ridParam = searchParams.get("rid") || "";
-  const rid = ridParam || (typeof window !== "undefined" ? localStorage.getItem("quickapply_resume_id") : "") || "";
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let ridParam = searchParams.get("rid") || "";
+  if (ridParam && !UUID_REGEX.test(ridParam)) ridParam = "";
+  
+  let localRid = typeof window !== "undefined" ? localStorage.getItem("quickapply_resume_id") : "";
+  if (localRid && !UUID_REGEX.test(localRid)) localRid = "";
+  
+  const rid = ridParam || localRid || "";
 
   useEffect(() => {
     if (rid && typeof window !== "undefined") {

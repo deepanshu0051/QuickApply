@@ -1,36 +1,78 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
+import { allowRequest } from '@/lib/rateLimit';
 
 export const runtime = "nodejs";
 
 export async function POST(request) {
   try {
-    const { resumeId } = await request.json();
+    // ── Rate limiting (10 req/min per IP) ──
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!allowRequest(ip, 10)) {
+      return NextResponse.json(
+        { success: false, error: 'Too many requests, please try again later.' },
+        { status: 429 }
+      );
+    }
 
-    if (!resumeId) {
-      return NextResponse.json({ success: false, error: "Missing resumeId" }, { status: 400 });
+    // ── Content-Type enforcement ──
+    const contentType = request.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json(
+        { success: false, error: 'Unsupported content type.' },
+        { status: 415 }
+      );
+    }
+
+    // ── Parse body ──
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
+    let { resumeId } = body;
+
+    // ── Input validation ──
+    if (!resumeId || typeof resumeId !== 'string' || !resumeId.trim()) {
+      return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 });
+    }
+    
+    resumeId = resumeId.trim();
+    if (resumeId.length > 500) {
+      return NextResponse.json({ success: false, error: "Invalid request data." }, { status: 400 });
     }
 
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return NextResponse.json({ success: false, error: "Razorpay credentials not configured." }, { status: 500 });
+      return NextResponse.json({ success: false, error: "Payment service is currently unavailable." }, { status: 500 });
     }
 
-    const usdPrice = Number(process.env.USD_PRICE || 1);
-    let rate = Number(process.env.DEFAULT_USD_INR || 87);
+    let inr;
+    const inrOverride = process.env.INR_OVERRIDE_PRICE;
+    if (inrOverride) {
+      inr = Number(inrOverride);
+    } else {
+      const usdPrice = Number(process.env.USD_PRICE || 1);
+      let rate = Number(process.env.DEFAULT_USD_INR || 87);
 
-    try {
-      const rateRes = await fetch("https://open.er-api.com/v6/latest/USD");
-      if (rateRes.ok) {
-        const rateData = await rateRes.json();
-        if (rateData && rateData.rates && rateData.rates.INR) {
-          rate = rateData.rates.INR;
+      try {
+        const rateRes = await fetch("https://open.er-api.com/v6/latest/USD");
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          if (rateData && rateData.rates && rateData.rates.INR) {
+            rate = rateData.rates.INR;
+          }
         }
+      } catch (err) {
+        console.warn("Failed to fetch exchange rate, using default.", err);
       }
-    } catch (err) {
-      console.warn("Failed to fetch exchange rate, using default.", err);
-    }
 
-    const inr = Math.round(usdPrice * rate);
+      inr = Math.round(usdPrice * rate);
+    }
     const amountPaise = inr * 100;
 
     const instance = new Razorpay({
@@ -57,7 +99,7 @@ export async function POST(request) {
   } catch (error) {
     console.error("Create order error:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to initiate payment. Please try again." },
+      { success: false, error: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }

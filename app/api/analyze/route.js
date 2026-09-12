@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
+import { allowRequest } from '@/lib/rateLimit';
 
 // Initialize Supabase admin client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -76,8 +77,6 @@ async function callGeminiWithFallback(aiClient, prompt) {
 
         const rawText = typeof response.text === 'function' ? response.text() : response.text;
 
-        console.log(`Raw Gemini Response (First 500 chars): ${rawText.substring(0, 500)}`);
-
         let parsedResult;
         // Try parsing JSON directly
         try {
@@ -150,19 +149,64 @@ async function callGeminiWithFallback(aiClient, prompt) {
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const resumeId = body.resumeId;
-
-    if (!resumeId) {
+    // ── Rate limiting (10 req/min per IP) ──
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!allowRequest(ip, 10)) {
       return NextResponse.json(
-        { success: false, error: 'No resume ID provided' },
+        { success: false, error: 'Too many requests, please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    // ── Content-Type enforcement ──
+    const contentType = request.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json(
+        { success: false, error: 'Unsupported content type.' },
+        { status: 415 }
+      );
+    }
+
+    // ── Parse body ──
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
+    let resumeId = body.resumeId;
+
+    // ── Input validation ──
+    if (!resumeId || typeof resumeId !== 'string' || !resumeId.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+    
+    resumeId = resumeId.trim();
+    if (resumeId.length > 500) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request data.' },
+        { status: 400 }
+      );
+    }
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(resumeId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid resume ID.' },
         { status: 400 }
       );
     }
 
     if (!ai) {
       return NextResponse.json(
-        { success: false, error: 'Gemini API key is not configured' },
+        { success: false, error: 'AI service is not available.' },
         { status: 500 }
       );
     }
@@ -181,7 +225,14 @@ export async function POST(request) {
       );
     }
 
-    const text = (resume.extracted_text || '').trim();
+    let text = (resume.extracted_text || '').trim();
+
+    // ── Sanitize text before processing ──
+    text = text.replace(/<[^>]*>/g, '');
+    text = text.replace(/\x00/g, '');
+    if (text.length > 50000) {
+      text = text.substring(0, 50000);
+    }
 
     // 2. Short/empty text — skip Gemini, return invalid
     if (text.length < MIN_TEXT_LENGTH) {
@@ -191,9 +242,6 @@ export async function POST(request) {
         reason: 'The uploaded document contains too little text to be a valid resume.'
       });
     }
-
-    // 3. Call Gemini AI for validation + analysis
-    console.log(`Extracted Text (First 200 chars): ${text.substring(0, 200)}`);
 
     const prompt = `You are an expert AI resume/CV reviewer. You will receive the full text extracted from a PDF document.
 
@@ -258,39 +306,30 @@ ${text}
       aiResult = await callGeminiWithFallback(ai, prompt);
     } catch (geminiError) {
       const isQuota = isRateLimitError(geminiError);
-      const isAuth = isAuthError(geminiError);
       console.error('Gemini API call failed:', geminiError.message || 'Unknown error');
       
-      let errorMessage = 'AI analysis failed, please try again';
+      let errorMessage = 'AI analysis failed, please try again.';
       let statusCode = 500;
       
       if (isQuota) {
         if (geminiError?.message?.toLowerCase().includes('503') || geminiError?.message?.toLowerCase().includes('high demand') || geminiError?.message?.toLowerCase().includes('unavailable')) {
-          errorMessage = 'AI model is experiencing high demand — please wait a moment and try again';
+          errorMessage = 'AI model is experiencing high demand — please wait a moment and try again.';
           statusCode = 503;
         } else {
-          errorMessage = 'AI quota exceeded — please wait a minute and try again';
+          errorMessage = 'AI quota exceeded — please wait a minute and try again.';
           statusCode = 429;
         }
-      } else if (isAuth) {
-        errorMessage = 'Invalid Gemini API key or lack of model permissions. Please check your .env.local file.';
-        statusCode = 401; // Return 401 so the frontend knows it's an auth error
       }
       
       return NextResponse.json(
-        {
-          success: false,
-          error: errorMessage
-        },
+        { success: false, error: errorMessage },
         { status: statusCode }
       );
     }
 
     // 4. Handle the result based on validation
-    console.log(`Parsed Result isValidResume: ${aiResult.isValidResume}`);
     
     if (!aiResult.isValidResume) {
-      console.log(`Analysis complete for resumeId: ${resumeId} — not a valid resume`);
       return NextResponse.json({
         success: true,
         isValidResume: false,
@@ -312,8 +351,6 @@ ${text}
       // Still return the analysis even if DB update fails — client can cache it
     }
 
-    console.log(`Analysis complete for resumeId: ${resumeId} — score: ${aiResult.score}`);
-
     return NextResponse.json({
       success: true,
       isValidResume: true,
@@ -323,7 +360,7 @@ ${text}
   } catch (error) {
     console.error('Analyze handler error:', error.message || 'Unknown error');
     return NextResponse.json(
-      { success: false, error: 'AI analysis failed, please try again' },
+      { success: false, error: 'Something went wrong. Please try again.' },
       { status: 500 }
     );
   }

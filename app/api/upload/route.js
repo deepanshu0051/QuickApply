@@ -21,6 +21,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(request) {
   try {
+    // Content-Type check skipped for upload — expects multipart/form-data
+
     const formData = await request.formData();
     const file = formData.get('file');
 
@@ -32,18 +34,25 @@ export async function POST(request) {
     }
 
     // 1. File Validation
-    if (file.type !== 'application/pdf') {
+    const isPdfType = file.type === 'application/pdf';
+    const isPdfExt = file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdfType || !isPdfExt) {
       return NextResponse.json(
-        { success: false, error: 'File must be a PDF' },
+        { success: false, error: 'Only PDF files are allowed.' },
         { status: 400 }
       );
     }
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { success: false, error: 'File size exceeds 5MB limit' },
+        { success: false, error: 'File size must be under 5MB.' },
         { status: 400 }
       );
+    }
+
+    let sanitizedOriginalName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
+    if (sanitizedOriginalName.length > 100) {
+      sanitizedOriginalName = sanitizedOriginalName.substring(0, 100);
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -68,9 +77,9 @@ export async function POST(request) {
       const result = await parser.getText();
       extractedText = result.text;
     } catch (error) {
-      console.error('PDF parsing error details:', error);
+      console.error('PDF parsing error:', error);
       return NextResponse.json(
-        { success: false, error: 'Failed to extract text from PDF', details: error.message },
+        { success: false, error: 'Failed to extract text from PDF. Please ensure the file is not corrupted.' },
         { status: 400 }
       );
     } finally {
@@ -100,9 +109,9 @@ export async function POST(request) {
       });
 
     if (storageError) {
-      console.error('Storage upload error details:', storageError);
+      console.error('Storage upload error:', storageError);
       return NextResponse.json(
-        { success: false, error: 'Failed to upload file to storage', details: storageError.message || JSON.stringify(storageError) },
+        { success: false, error: 'Failed to upload file. Please try again.' },
         { status: 500 }
       );
     }
@@ -112,7 +121,7 @@ export async function POST(request) {
       .from('resumes')
       .insert({
         id: id,
-        original_name: file.name,
+        original_name: sanitizedOriginalName,
         storage_path: filename,
         mime_type: 'application/pdf',
         size_bytes: file.size,
@@ -123,7 +132,7 @@ export async function POST(request) {
       });
 
     if (dbError) {
-      console.error('Database insert error details:', dbError);
+      console.error('Database insert error:', dbError);
       
       // Attempt cleanup of storage if DB insert fails
       await supabase.storage.from('resumes').remove([filename]);
@@ -147,7 +156,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('Upload handler error:', error);
     return NextResponse.json(
-      { success: false, error: 'An unexpected error occurred during upload' },
+      { success: false, error: 'Something went wrong. Please try again.' },
       { status: 500 }
     );
   }

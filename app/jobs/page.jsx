@@ -91,13 +91,30 @@ function LocationPill({ label, active, onClick }) {
   );
 }
 
+function safeString(val, maxLen, defaultVal = "Not specified") {
+  if (typeof val !== "string" || !val.trim()) return defaultVal;
+  const trimmed = val.trim();
+  return trimmed.length > maxLen ? trimmed.substring(0, maxLen) + "..." : trimmed;
+}
+
 // ── Job Card ───────────────────────────────────────────────────────────────────
 function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExpand, delay }) {
   const [visible, setVisible] = useState(false);
   const [hovered, setHovered] = useState(false);
   const mc = getMatchConfig(job.matchScore);
-  const visibleSkills = job.skills.slice(0, 3);
-  const extraSkills = job.skills.slice(3);
+  
+  const safeTitle = safeString(job.title, 100);
+  const safeCompany = safeString(job.company, 100);
+  const safeLocation = safeString(job.location, 100);
+  const safeMode = safeString(job.mode, 50, "Onsite");
+  const safeType = safeString(job.type, 50, "Full-time");
+  const safeSalary = safeString(job.salary, 50, "Not Disclosed");
+  const safePostedAt = safeString(job.postedAt, 50, "Recently");
+  const safeDesc = safeString(job.description, 300, "No description provided.");
+  const safeSource = safeString(job.source, 50, "JSearch");
+  
+  const visibleSkills = Array.isArray(job.skills) ? job.skills.slice(0, 3) : [];
+  const extraSkills = Array.isArray(job.skills) ? job.skills.slice(3) : [];
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), delay);
@@ -133,13 +150,13 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
             className="w-11 h-11 rounded-xl flex-shrink-0 flex items-center justify-center font-bold text-sm text-white"
             style={{ background: "linear-gradient(135deg,#7c3aed,#2563eb)", boxShadow: "0 4px 14px rgba(124,58,237,0.35)" }}
           >
-            {getInitials(job.company)}
+            {getInitials(safeCompany)}
           </div>
 
           {/* Title + company */}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white leading-tight truncate">{job.title}</p>
-            <p className="text-xs text-[rgba(255,255,255,0.45)] mt-0.5 truncate">{job.company}</p>
+            <p className="text-sm font-bold text-white leading-tight truncate">{safeTitle}</p>
+            <p className="text-xs text-[rgba(255,255,255,0.45)] mt-0.5 truncate">{safeCompany}</p>
           </div>
 
           {/* Match + Bookmark */}
@@ -175,11 +192,11 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
 
         {/* ── Meta Pills ──────────────────────────────────────────── */}
         <div className="flex flex-wrap gap-2">
-          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>{job.location}</span></MetaPill>
-          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{job.mode}</span></MetaPill>
-          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>{job.type}</span></MetaPill>
-          <span className="text-xs font-semibold text-[#4ade80] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>{job.salary}</span>
-          <span className="text-xs text-[rgba(255,255,255,0.35)] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{job.postedAt}</span>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>{safeLocation}</span></MetaPill>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{safeMode}</span></MetaPill>
+          <MetaPill><span className="inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>{safeType}</span></MetaPill>
+          <span className="text-xs font-semibold text-[#4ade80] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>{safeSalary}</span>
+          <span className="text-xs text-[rgba(255,255,255,0.35)] inline-flex items-center gap-1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{safePostedAt}</span>
         </div>
 
         {/* ── Skills ──────────────────────────────────────────────── */}
@@ -219,9 +236,9 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
         <div>
           <p
             className="text-xs text-[rgba(255,255,255,0.50)] leading-relaxed"
-            style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 2, overflow: "hidden" }}
+            style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 2, overflow: "hidden", wordBreak: "break-word" }}
           >
-            {job.description}
+            {safeDesc}
           </p>
           <button
             onClick={() => onToggleExpand(job.id)}
@@ -233,7 +250,7 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
 
         {/* ── Footer ──────────────────────────────────────────────── */}
         <div className="flex items-center justify-between pt-3 border-t border-[rgba(255,255,255,0.06)] mt-auto gap-3">
-          <span className="text-xs text-[rgba(255,255,255,0.30)]">via {job.source}</span>
+          <span className="text-xs text-[rgba(255,255,255,0.30)]">via {safeSource}</span>
           <button
             onClick={() => onApply(job)}
             className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white
@@ -277,8 +294,14 @@ function JobsPageInner() {
   const searchParams = useSearchParams();
 
   // Read rid from URL, fallback to localStorage
-  const ridParam = searchParams.get("rid") || "";
-  const rid = ridParam || (typeof window !== "undefined" ? localStorage.getItem("quickapply_resume_id") : "") || "";
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let ridParam = searchParams.get("rid") || "";
+  if (ridParam && !UUID_REGEX.test(ridParam)) ridParam = "";
+  
+  let localRid = typeof window !== "undefined" ? localStorage.getItem("quickapply_resume_id") : "";
+  if (localRid && !UUID_REGEX.test(localRid)) localRid = "";
+  
+  const rid = ridParam || localRid || "";
   useEffect(() => {
     if (rid) {
       localStorage.setItem("quickapply_resume_id", rid);

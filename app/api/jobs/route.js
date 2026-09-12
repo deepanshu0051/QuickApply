@@ -5,7 +5,13 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query") || "Software Developer";
-    const rid = searchParams.get("rid");
+    let rid = searchParams.get("rid");
+    if (rid) {
+      rid = rid.trim();
+      if (rid.length > 500) {
+        return NextResponse.json({ success: false, error: "Invalid request data." }, { status: 400 });
+      }
+    }
     
     // Check payment token
     const token = request.headers.get("x-quickapply-access-token");
@@ -20,7 +26,7 @@ export async function GET(request) {
     
     if (!process.env.RAPIDAPI_KEY) {
       return NextResponse.json(
-        { success: false, error: "RAPIDAPI_KEY is not configured" },
+        { success: false, error: "Service configuration error. Please try again later." },
         { status: 500 }
       );
     }
@@ -122,13 +128,14 @@ export async function GET(request) {
 
       return NextResponse.json({ success: true, jobs: formattedJobs });
     } else {
-      return NextResponse.json({ success: false, error: data.message || "Failed to fetch jobs" }, { status: 400 });
+      console.error("Job fetch API returned non-OK status or missing data", data);
+      return NextResponse.json({ success: false, error: "Failed to fetch jobs. Please try again." }, { status: 400 });
     }
     
   } catch (error) {
-    console.error("API error:", error);
+    console.error("Jobs API error:", error);
     return NextResponse.json(
-      { success: false, error: error.message },
+      { success: false, error: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }
