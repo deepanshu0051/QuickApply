@@ -1,27 +1,28 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { PDFParse } from 'pdf-parse';
-
-// Initialize Supabase admin client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
+import PDFParser from 'pdf2json';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export async function POST(request) {
   try {
-    // Content-Type check skipped for upload — expects multipart/form-data
+    // 1. Initialize Supabase locally in the handler to prevent global 500 crashes
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.json(
+        { success: false, error: 'Server configuration error: Missing environment variables' },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
 
     const formData = await request.formData();
     const file = formData.get('file');
@@ -33,7 +34,7 @@ export async function POST(request) {
       );
     }
 
-    // 1. File Validation
+    // 2. File Validation
     const isPdfType = file.type === 'application/pdf';
     const isPdfExt = file.name.toLowerCase().endsWith('.pdf');
     if (!isPdfType || !isPdfExt) {
@@ -59,7 +60,6 @@ export async function POST(request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Verify magic bytes (%PDF-) for PDF
-    // PDF files start with %PDF- (hex 25 50 44 46 2D) but can have up to 1024 bytes before the header
     const headerString = buffer.toString('utf8', 0, Math.min(buffer.length, 1024));
     if (!headerString.includes('%PDF-')) {
       return NextResponse.json(
@@ -68,28 +68,31 @@ export async function POST(request) {
       );
     }
 
-    // 2. Extract Text (pdf-parse v2 API)
+    // 3. Extract Text using pdf2json
     let extractedText = '';
-    let parser = null;
     try {
-      const uint8Array = new Uint8Array(arrayBuffer);
-      parser = new PDFParse({ data: uint8Array });
-      const result = await parser.getText();
-      extractedText = result.text;
+      extractedText = await new Promise((resolve, reject) => {
+        const pdfParser = new PDFParser(null, 1);
+        
+        pdfParser.on("pdfParser_dataError", errData => {
+          reject(errData.parserError);
+        });
+        
+        pdfParser.on("pdfParser_dataReady", () => {
+          resolve(pdfParser.getRawTextContent());
+        });
+        
+        pdfParser.parseBuffer(buffer);
+      });
     } catch (error) {
       console.error('PDF parsing error:', error);
       return NextResponse.json(
         { success: false, error: 'Failed to extract text from PDF. Please ensure the file is not corrupted.' },
         { status: 400 }
       );
-    } finally {
-      if (parser) {
-        await parser.destroy().catch(() => {});
-      }
     }
 
     // Sanitize extracted text to remove null bytes and invalid control characters
-    // Postgres text/jsonb columns cannot store \u0000 or certain control sequences
     const sanitizedText = extractedText
       .replace(/\u0000/g, '')
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');

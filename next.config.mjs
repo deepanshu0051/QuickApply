@@ -13,7 +13,7 @@ const cspHeader = `
 `.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
 
 const nextConfig = {
-  serverExternalPackages: ['pdf-parse'],
+  serverExternalPackages: ['pdf2json'],
   async headers() {
     return [
       {
