@@ -1,12 +1,12 @@
 /** @type {import('next').NextConfig} */
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com;
+  script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://cdn.razorpay.com;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https://*.razorpay.com;
   font-src 'self';
-  connect-src 'self' https://checkout.razorpay.com https://*.razorpay.com https://*.supabase.co;
-  frame-src https://api.razorpay.com https://checkout.razorpay.com;
+  connect-src 'self' https://checkout.razorpay.com https://*.razorpay.com https://cdn.razorpay.com https://*.supabase.co;
+  frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com;
   object-src 'none';
   base-uri 'self';
   form-action 'self';
