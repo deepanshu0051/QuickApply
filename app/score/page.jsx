@@ -524,7 +524,7 @@ function ScorePageInner() {
         </div>
 
       <main 
-        className="flex-1 w-full max-w-2xl mx-auto px-4 pb-8 space-y-6"
+        className="flex-1 w-full max-w-2xl mx-auto px-3 sm:px-4 pb-8 space-y-5 sm:space-y-6"
         style={{
           paddingTop: showNavbar ? '80px' : '32px',
           transition: 'padding-top 600ms ease-in-out'
@@ -547,7 +547,7 @@ function ScorePageInner() {
               </svg>
             </button>
             <div>
-              <h1 className="text-xl font-bold text-white leading-tight">Resume Analysis</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-white leading-tight">Resume Analysis</h1>
               <p className="text-xs text-[rgba(255,255,255,0.40)]">Here&apos;s how your resume performs</p>
             </div>
           </div>
@@ -556,7 +556,7 @@ function ScorePageInner() {
         {/* ── 2. Score Card ─────────────────────────────────────────────────── */}
         <FadeSection delay={100}>
           <div
-            className="rounded-2xl p-6 sm:p-8"
+            className="rounded-2xl p-5 sm:p-6 md:p-8"
             style={{
               background: "rgba(14,14,24,0.72)",
               backdropFilter: "blur(40px)",
@@ -591,7 +591,7 @@ function ScorePageInner() {
             <div className="my-6 border-t border-[rgba(255,255,255,0.07)]" />
 
             {/* Stat pills */}
-            <div className="flex flex-wrap justify-center gap-3">
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
               <StatPill
                 label={`${data.skills.length} Skills Found`}
                 color="#a855f7"

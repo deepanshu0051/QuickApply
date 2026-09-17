@@ -51,29 +51,36 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: "Payment service is currently unavailable." }, { status: 500 });
     }
 
+    let amountPaise;
     let inr;
-    const inrOverride = process.env.INR_OVERRIDE_PRICE;
-    if (inrOverride) {
-      inr = Number(inrOverride);
+
+    if (process.env.FORCE_AMOUNT_PAISE && !isNaN(Number(process.env.FORCE_AMOUNT_PAISE))) {
+      amountPaise = Number(process.env.FORCE_AMOUNT_PAISE);
+      inr = amountPaise / 100;
     } else {
-      const usdPrice = Number(process.env.USD_PRICE || 1);
-      let rate = Number(process.env.DEFAULT_USD_INR || 87);
+      const inrOverride = process.env.INR_OVERRIDE_PRICE;
+      if (inrOverride) {
+        inr = Number(inrOverride);
+      } else {
+        const usdPrice = Number(process.env.USD_PRICE || 1);
+        let rate = Number(process.env.DEFAULT_USD_INR || 87);
 
-      try {
-        const rateRes = await fetch("https://open.er-api.com/v6/latest/USD");
-        if (rateRes.ok) {
-          const rateData = await rateRes.json();
-          if (rateData && rateData.rates && rateData.rates.INR) {
-            rate = rateData.rates.INR;
+        try {
+          const rateRes = await fetch("https://open.er-api.com/v6/latest/USD");
+          if (rateRes.ok) {
+            const rateData = await rateRes.json();
+            if (rateData && rateData.rates && rateData.rates.INR) {
+              rate = rateData.rates.INR;
+            }
           }
+        } catch (err) {
+          console.warn("Failed to fetch exchange rate, using default.", err);
         }
-      } catch (err) {
-        console.warn("Failed to fetch exchange rate, using default.", err);
-      }
 
-      inr = Math.round(usdPrice * rate);
+        inr = Math.round(usdPrice * rate);
+      }
+      amountPaise = inr * 100;
     }
-    const amountPaise = inr * 100;
 
     const instance = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID,

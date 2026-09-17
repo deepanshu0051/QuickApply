@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 
 export default function Home() {
   const [showModal, setShowModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleEsc = (e) => {
@@ -65,8 +66,23 @@ export default function Home() {
             </div>
 
             <div className="md:hidden flex items-center gap-4">
-              <button onClick={() => setShowModal(true)} className="text-xs text-[#a1a1aa] hover:text-white transition cursor-pointer">
-                How it Works
+              <button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+                className="text-white hover:text-gray-300 transition-colors p-1"
+                aria-label="Toggle mobile menu"
+              >
+                {mobileMenuOpen ? (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                )}
               </button>
               <Link href="/upload" className="bg-[#f5f5f5] text-black font-semibold rounded-full px-4 py-1.5 text-xs hover:-translate-y-0.5 transition-all">
                 Upload
@@ -74,6 +90,42 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* ── Mobile Dropdown Menu ───────────────────────────────── */}
+        {mobileMenuOpen && (
+          <div 
+            className="md:hidden absolute top-full left-0 w-full px-6 py-4 shadow-xl"
+            style={{
+              background: "rgba(20, 20, 30, 0.95)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              borderBottom: "1px solid rgba(255,255,255,0.07)"
+            }}
+          >
+            <div className="flex flex-col">
+              <button
+                onClick={() => { setShowModal(true); setMobileMenuOpen(false); }}
+                className="text-left text-base text-[rgba(255,255,255,0.75)] hover:text-white py-3 border-b border-white/10 transition-colors"
+              >
+                How it Works
+              </button>
+              <Link
+                href="/terms"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-base text-[rgba(255,255,255,0.75)] hover:text-white py-3 border-b border-white/10 transition-colors"
+              >
+                Terms & Conditions
+              </Link>
+              <Link
+                href="/refund-policy"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-base text-[rgba(255,255,255,0.75)] hover:text-white py-3 transition-colors"
+              >
+                Refund Policy
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       <div className="flex-1 flex flex-col justify-center items-center px-4 max-w-5xl mx-auto w-full pb-6">
@@ -81,7 +133,7 @@ export default function Home() {
         {/* Hero Section */}
         <section className="text-center max-w-3xl mx-auto mb-8 md:mb-10">
           <Image src="/logo.png?v=3" alt="QuickApply Logo" width={64} height={64} className="mx-auto mb-4" unoptimized />
-          <h1 className="text-5xl md:text-6xl font-bold text-[#f5f5f5] mb-4 tracking-tight">
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-[#f5f5f5] mb-4 tracking-tight">
             QuickApply
           </h1>
           <p className="text-lg md:text-xl text-[#a1a1aa] mb-6 md:mb-8 overflow-hidden max-w-full">
@@ -136,7 +188,7 @@ export default function Home() {
         >
           {/* Modal Card */}
           <div 
-            className="w-full max-w-lg rounded-2xl p-8 relative transform transition-all"
+            className="w-full max-w-lg rounded-2xl p-5 sm:p-8 relative transform transition-all max-h-[90vh] overflow-y-auto"
             style={{
               background: "rgba(20, 20, 30, 0.90)",
               border: "1px solid rgba(139, 92, 246, 0.45)",
@@ -148,7 +200,7 @@ export default function Home() {
           >
             {/* Header */}
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-bold text-white">How QuickApply Works</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-white">How QuickApply Works</h2>
               <button 
                 onClick={() => setShowModal(false)}
                 className="text-gray-400 hover:text-white transition-colors"
@@ -202,6 +254,19 @@ export default function Home() {
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold"
                   style={{ background: "linear-gradient(135deg, #7c3aed, #2563eb)" }}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold">One-Time Payment</h3>
+                  <p className="text-sm text-gray-400">Unlock your matched jobs with a one-time payment of $1 — no subscription, no hidden charges</p>
+                  <p className="text-xs italic mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>You get 2 free refreshes per session to load fresh job results.</p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold"
+                  style={{ background: "linear-gradient(135deg, #7c3aed, #2563eb)" }}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
                 <div>
@@ -213,8 +278,9 @@ export default function Home() {
 
             {/* Footer Tip */}
             <div className="mt-6 pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-              <p className="text-sm text-gray-400 text-center">
-                💡 Tip: Use a clean, well-formatted PDF for best results
+              <p className="text-sm text-gray-400 text-center flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                Tip: Use a clean, well-formatted PDF for best results
               </p>
             </div>
           </div>

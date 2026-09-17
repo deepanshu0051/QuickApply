@@ -196,7 +196,7 @@ export default function UploadPage() {
       </nav>
 
       {/* Page content */}
-      <div className="max-w-4xl mx-auto px-4 pt-[100px] pb-12 w-full flex-1 flex flex-col">
+      <div className="max-w-4xl mx-auto px-4 pt-20 sm:pt-[100px] pb-12 w-full flex-1 flex flex-col">
         <h1 className="text-3xl md:text-4xl font-bold text-center mb-4 text-[#f5f5f5] tracking-tight">
           Upload Your Resume
         </h1>
@@ -225,7 +225,7 @@ export default function UploadPage() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className="upload-card max-w-xl mx-auto w-full min-h-[220px] flex flex-col items-center justify-center gap-3 cursor-pointer select-none outline-none
+          className="upload-card max-w-xl mx-auto w-full min-h-[180px] sm:min-h-[220px] flex flex-col items-center justify-center gap-3 cursor-pointer select-none outline-none
             focus-visible:ring-2 focus-visible:ring-[#a855f7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#080808]"
           style={{
             border: `2px dashed ${dropzoneBorder}`,
@@ -302,7 +302,7 @@ export default function UploadPage() {
                 </svg>
               </div>
 
-              <h3 className="text-xl font-semibold text-[#f5f5f5] text-center">
+              <h3 className="text-lg sm:text-xl font-semibold text-[#f5f5f5] text-center">
                 {isDragOver ? "Drop your PDF here" : "Drag & drop your resume here"}
               </h3>
               <p className="text-[#a1a1aa] text-center text-sm">or click to browse</p>

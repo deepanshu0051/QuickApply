@@ -13,7 +13,7 @@ export default function RefundPolicyPage() {
       <div className="relative z-10 flex flex-col min-h-screen">
         <Navbar />
 
-        <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-24 space-y-8">
+        <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-16 sm:py-24 space-y-8">
           <div
             className="rounded-2xl p-6 sm:p-10"
             style={{
@@ -25,7 +25,7 @@ export default function RefundPolicyPage() {
             }}
           >
             <div className="flex justify-between items-start mb-6">
-              <h1 className="text-3xl font-bold text-white">Refund Policy</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">Refund Policy</h1>
               <button
                 onClick={() => router.back()}
                 className="w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.15)] text-[rgba(255,255,255,0.6)] hover:text-white border border-[rgba(255,255,255,0.1)]"

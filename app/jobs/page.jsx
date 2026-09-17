@@ -8,6 +8,47 @@ import AnimatedBackground from "@/components/AnimatedBackground";
 // ── Live Data Setup (demoJobs removed) ──────────────────────────────────────────
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+function getSalaryDisplay(job) {
+  const min = job.job_min_salary;
+  const max = job.job_max_salary;
+  const currency = job.job_salary_currency;
+  const period = job.job_salary_period;
+
+  if (min == null && max == null) {
+    return "Not Disclosed";
+  }
+
+  let symbol = "";
+  if (currency) {
+    const currUpper = currency.toUpperCase();
+    if (currUpper === "INR") symbol = "₹";
+    else if (currUpper === "USD") symbol = "$";
+    else if (currUpper === "GBP") symbol = "£";
+    else if (currUpper === "EUR") symbol = "€";
+    else symbol = currency;
+  }
+
+  const formatNum = (num) => num.toLocaleString();
+
+  let salaryStr = "";
+  if (min != null && max != null) {
+    salaryStr = `${symbol}${formatNum(min)} - ${symbol}${formatNum(max)}`;
+  } else if (min != null) {
+    salaryStr = `From ${symbol}${formatNum(min)}`;
+  } else if (max != null) {
+    salaryStr = `Up to ${symbol}${formatNum(max)}`;
+  }
+
+  if (period) {
+    const periodUpper = period.toUpperCase();
+    if (periodUpper === "YEAR") salaryStr += " (per year)";
+    else if (periodUpper === "MONTH") salaryStr += " (per month)";
+    else if (periodUpper === "HOUR") salaryStr += " (per hour)";
+  }
+
+  return salaryStr;
+}
+
 function getMatchConfig(score) {
   if (score >= 90) return { bg: "rgba(34,197,94,0.14)",  border: "rgba(34,197,94,0.50)",  color: "#4ade80" };
   if (score >= 80) return { bg: "rgba(59,130,246,0.14)", border: "rgba(59,130,246,0.50)", color: "#60a5fa" };
@@ -108,7 +149,7 @@ function JobCard({ job, isBookmarked, onBookmark, onApply, expanded, onToggleExp
   const safeLocation = safeString(job.location, 100);
   const safeMode = safeString(job.mode, 50, "Onsite");
   const safeType = safeString(job.type, 50, "Full-time");
-  const safeSalary = safeString(job.salary, 50, "Not Disclosed");
+  const safeSalary = getSalaryDisplay(job);
   const safePostedAt = safeString(job.postedAt, 50, "Recently");
   const safeDesc = safeString(job.description, 300, "No description provided.");
   const safeSource = safeString(job.source, 50, "JSearch");
@@ -330,6 +371,7 @@ function JobsPageInner() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
 
   // Visibility for entrance animations
   const [headerVisible, setHeaderVisible] = useState(false);
@@ -391,10 +433,12 @@ function JobsPageInner() {
   useEffect(() => { fetchJobs(); }, [rid]);
 
   const handleRefreshJobs = async () => {
+    if (refreshCount >= 2) return;
     setIsRefreshing(true);
     setRefreshError("");
     setSessionExpired(false);
     await fetchJobs({ isRefresh: true });
+    setRefreshCount((prev) => prev + 1);
   };
 
   // Reset client page to 1 when filters change
@@ -609,15 +653,30 @@ function JobsPageInner() {
             transition: "opacity 0.50s ease, transform 0.50s ease",
           }}
         >
-          <h1 className="text-2xl font-bold text-white mb-1">Jobs Matched For You</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">Jobs Matched For You</h1>
           <p className="text-sm text-[rgba(255,255,255,0.40)] mb-4">
             Based on your resume analysis — sorted by match score
           </p>
           {/* Stats */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <StatBadge label={`${jobs.length} Jobs Found`} bg="rgba(139,92,246,0.14)" border="rgba(139,92,246,0.40)" color="#c4b5fd" />
             <StatBadge label={`Avg Match: ${avgMatch}%`} bg="rgba(59,130,246,0.14)" border="rgba(59,130,246,0.40)" color="#60a5fa" />
             <span className="text-xs text-[rgba(255,255,255,0.35)]">Updated: Just now</span>
+          </div>
+
+          <div 
+            className="flex items-start gap-2 px-4 py-2 rounded-lg mt-4"
+            style={{ 
+              background: "rgba(124, 58, 237, 0.10)", 
+              border: "1px solid rgba(124, 58, 237, 0.25)" 
+            }}
+          >
+            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#a855f7" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-normal" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Not seeing relevant jobs? Try clicking Refresh Jobs below — fresh results load each time.
+            </p>
           </div>
         </div>
 
@@ -651,33 +710,39 @@ function JobsPageInner() {
           {/* Filter pills */}
           <div className="flex flex-wrap gap-3 items-center">
             {/* Mode */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
               <span className="text-xs text-[rgba(255,255,255,0.35)] mr-0.5">Mode:</span>
-              {["All", "Remote", "Hybrid", "Onsite"].map((m) => (
-                <FilterPill key={m} label={m} active={filterMode === m} onClick={() => setFilterMode(m)} />
-              ))}
+              <div className="flex flex-wrap gap-1.5">
+                {["All", "Remote", "Hybrid", "Onsite"].map((m) => (
+                  <FilterPill key={m} label={m} active={filterMode === m} onClick={() => setFilterMode(m)} />
+                ))}
+              </div>
             </div>
-            <div className="w-px h-4 bg-[rgba(255,255,255,0.10)]" />
+            <div className="hidden sm:block w-px h-4 bg-[rgba(255,255,255,0.10)]" />
             {/* Type */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto mt-2 sm:mt-0">
               <span className="text-xs text-[rgba(255,255,255,0.35)] mr-0.5">Type:</span>
-              {["All", "Full-time", "Contract"].map((t) => (
-                <FilterPill key={t} label={t} active={filterType === t} onClick={() => setFilterType(t)} />
-              ))}
+              <div className="flex flex-wrap gap-1.5">
+                {["All", "Full-time", "Contract"].map((t) => (
+                  <FilterPill key={t} label={t} active={filterType === t} onClick={() => setFilterType(t)} />
+                ))}
+              </div>
             </div>
-            <div className="w-px h-4 bg-[rgba(255,255,255,0.10)]" />
+            <div className="hidden sm:block w-px h-4 bg-[rgba(255,255,255,0.10)]" />
             {/* Match */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 w-full sm:w-auto mt-2 sm:mt-0">
               <span className="text-xs text-[rgba(255,255,255,0.35)] mr-0.5">Match:</span>
-              {["All", "90%+", "80%+", "70%+"].map((m) => (
-                <FilterPill key={m} label={m} active={filterMatch === m} onClick={() => setFilterMatch(m)} />
-              ))}
+              <div className="flex flex-wrap gap-1.5">
+                {["All", "90%+", "80%+", "70%+"].map((m) => (
+                  <FilterPill key={m} label={m} active={filterMatch === m} onClick={() => setFilterMatch(m)} />
+                ))}
+              </div>
             </div>
 
             {hasActiveFilter && (
               <button
                 onClick={clearFilters}
-                className="ml-auto text-xs text-red-400 border border-[rgba(239,68,68,0.35)] px-3 py-1.5 rounded-full
+                className="w-full sm:w-auto sm:ml-auto mt-2 sm:mt-0 text-xs text-red-400 border border-[rgba(239,68,68,0.35)] px-3 py-1.5 rounded-full
                   hover:bg-[rgba(239,68,68,0.10)] transition-all duration-200"
               >
                 Clear Filters
@@ -713,10 +778,10 @@ function JobsPageInner() {
         </div>
 
         {/* ── Navigation Buttons ─────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3">
           <button
             onClick={() => { setActiveScoreTab("score"); setShowScoreModal(true); }}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
             style={{
               background: "transparent",
               border: "1px solid rgba(139,92,246,0.50)",
@@ -732,8 +797,8 @@ function JobsPageInner() {
           </button>
           <button
             onClick={handleRefreshJobs}
-            disabled={isRefreshing}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={isRefreshing || refreshCount >= 2}
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: "rgba(37,99,235,0.15)",
               border: "1px solid rgba(37,99,235,0.50)",
@@ -741,7 +806,7 @@ function JobsPageInner() {
               backdropFilter: "blur(12px)",
               WebkitBackdropFilter: "blur(12px)",
             }}
-            onMouseEnter={(e) => { if (!isRefreshing) e.currentTarget.style.background = "rgba(37,99,235,0.25)"; }}
+            onMouseEnter={(e) => { if (!isRefreshing && refreshCount < 2) e.currentTarget.style.background = "rgba(37,99,235,0.25)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(37,99,235,0.15)"; }}
           >
             {isRefreshing ? (
@@ -753,12 +818,12 @@ function JobsPageInner() {
                 Refreshing...
               </>
             ) : (
-              <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Refresh Jobs</>
+              <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Refresh Jobs{refreshCount > 0 ? ` (${Math.max(0, 2 - refreshCount)} left)` : ""}</>
             )}
           </button>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer flex items-center gap-1.5"
             style={{
               background: "rgba(239,68,68,0.15)",
               border: "1px solid rgba(239,68,68,0.50)",
@@ -775,6 +840,27 @@ function JobsPageInner() {
         </div>
 
         {/* ── Refresh error / Session expired inline messages ─────────────── */}
+        {refreshCount >= 2 && (
+          <div 
+            className="flex items-start gap-3 px-4 py-3 rounded-lg mt-3"
+            style={{ 
+              background: "rgba(124, 58, 237, 0.08)", 
+              border: "1px solid rgba(124, 58, 237, 0.20)" 
+            }}
+          >
+            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: "#a855f7" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex flex-col gap-0.5">
+              <p className="text-sm" style={{ color: "rgba(255,255,255,0.70)" }}>
+                You have used both refreshes for this session.
+              </p>
+              <p className="text-xs italic" style={{ color: "rgba(255,255,255,0.45)" }}>
+                New jobs are posted daily by companies. Come back in a few days for fresh listings — you may find more relevant opportunities then.
+              </p>
+            </div>
+          </div>
+        )}
         {refreshError && (
           <p className="text-sm text-red-400 text-center -mt-2">{refreshError}</p>
         )}
@@ -808,7 +894,7 @@ function JobsPageInner() {
         {/* ── 3. Job Cards Grid ─────────────────────────────────────────────── */}
         <div className="relative">
           {displayedJobs.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[300px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 min-h-[300px]">
               {displayedJobs.map((job, idx) => (
               <JobCard
                 key={job.id}
@@ -848,15 +934,15 @@ function JobsPageInner() {
 
         {/* Pagination Controls */}
         {filteredJobs.length > 0 && (
-          <div className="flex items-center justify-center gap-6 mt-8 py-4">
+          <div className="flex items-center justify-center gap-3 sm:gap-6 mt-8 py-4">
             <button
               onClick={handlePrev}
               disabled={currentPage === 1}
-              className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(255,255,255,0.02)] disabled:border-[rgba(255,255,255,0.05)] disabled:text-[rgba(255,255,255,0.3)] bg-[rgba(139,92,246,0.1)] text-[#c4b5fd] border border-[rgba(139,92,246,0.45)] hover:bg-[rgba(139,92,246,0.2)]"
+              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(255,255,255,0.02)] disabled:border-[rgba(255,255,255,0.05)] disabled:text-[rgba(255,255,255,0.3)] bg-[rgba(139,92,246,0.1)] text-[#c4b5fd] border border-[rgba(139,92,246,0.45)] hover:bg-[rgba(139,92,246,0.2)]"
             >
               Previous
             </button>
-            <span className="text-sm font-semibold text-[rgba(255,255,255,0.7)] bg-[rgba(255,255,255,0.05)] px-4 py-2 rounded-lg border border-[rgba(255,255,255,0.1)]">
+            <span className="text-xs sm:text-sm font-semibold text-[rgba(255,255,255,0.7)] bg-[rgba(255,255,255,0.05)] px-3 sm:px-4 py-2 rounded-lg border border-[rgba(255,255,255,0.1)]">
               Page {currentPage}
             </span>
             {filteredJobs.length <= 10 ? (
@@ -865,7 +951,7 @@ function JobsPageInner() {
               <button
                 onClick={handleNext}
                 disabled={!hasNextPage}
-                className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(255,255,255,0.02)] disabled:border-[rgba(255,255,255,0.05)] disabled:text-[rgba(255,255,255,0.3)] bg-[rgba(139,92,246,0.1)] text-[#c4b5fd] border border-[rgba(139,92,246,0.45)] hover:bg-[rgba(139,92,246,0.2)]"
+                className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[rgba(255,255,255,0.02)] disabled:border-[rgba(255,255,255,0.05)] disabled:text-[rgba(255,255,255,0.3)] bg-[rgba(139,92,246,0.1)] text-[#c4b5fd] border border-[rgba(139,92,246,0.45)] hover:bg-[rgba(139,92,246,0.2)]"
               >
                 Next
               </button>
@@ -898,12 +984,12 @@ function JobsPageInner() {
               border: "1px solid rgba(239,68,68,0.60)",
               boxShadow: "0 0 40px rgba(239,68,68,0.30)",
               borderRadius: "1.25rem",
-              padding: "2rem",
+              padding: "1.5rem",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-            <h2 className="text-2xl font-bold text-red-400 text-center mt-3">Are you sure?</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-red-400 text-center mt-3">Are you sure?</h2>
             <p className="text-sm text-center mt-1" style={{ color: "rgba(252,165,165,0.70)" }}>This action cannot be undone</p>
             <div className="my-4" style={{ borderTop: "1px solid rgba(127,29,29,0.40)" }} />
             <p className="text-sm text-gray-300 leading-relaxed">
@@ -912,7 +998,7 @@ function JobsPageInner() {
             <div className="mt-3" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: "0.75rem", padding: "0.75rem 1rem" }}>
               <p className="text-sm font-medium inline-flex items-center gap-1.5" style={{ color: "#fca5a5" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>You will be charged again for the new resume.</p>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="flex-1 px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer"
@@ -978,7 +1064,7 @@ function JobsPageInner() {
             onKeyDown={(e) => { if (e.key === "Escape") setShowScoreModal(false); }}
           >
             <div
-              className="relative w-[90%] overflow-y-auto"
+              className="relative w-full sm:w-[90%] overflow-y-auto"
               style={{
                 maxWidth: "560px",
                 maxHeight: "85vh",
@@ -986,7 +1072,7 @@ function JobsPageInner() {
                 border: "1px solid rgba(139,92,246,0.45)",
                 boxShadow: "0 0 50px rgba(139,92,246,0.20)",
                 borderRadius: "1.5rem",
-                padding: "2rem",
+                padding: "1.25rem",
               }}
               onClick={(e) => e.stopPropagation()}
             >

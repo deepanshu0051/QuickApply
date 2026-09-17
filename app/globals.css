@@ -77,6 +77,12 @@ body {
   transition: all 350ms ease;
 }
 
+@media (max-width: 639px) {
+  .feature-card {
+    max-width: 100%;
+  }
+}
+
 .feature-card:hover {
   transform: translateY(-8px);
   backdrop-filter: blur(48px);
@@ -164,6 +170,16 @@ body {
 @keyframes qaCaret{
   0%, 100%{ border-color: rgba(168,85,247,0.0); }
   50%{ border-color: rgba(168,85,247,0.85); }
+}
+
+@media (max-width: 639px) {
+  .qa-typing {
+    white-space: normal;
+    border-right: none;
+    padding-right: 0;
+    width: auto;
+    animation: none;
+  }
 }
 
 .qa-glowCard{
