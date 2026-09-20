@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function AdminBypassPage() {
+function AdminBypassContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [authorized, setAuthorized] = useState(null);
@@ -71,4 +71,12 @@ export default function AdminBypassPage() {
   }
 
   return null;
+}
+
+export default function AdminBypassPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminBypassContent />
+    </Suspense>
+  );
 }
