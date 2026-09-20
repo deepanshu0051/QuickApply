@@ -15,13 +15,19 @@ export async function GET(request) {
     
     // Check payment token
     const token = request.headers.get("x-quickapply-access-token");
-    const payload = verifyToken(token);
-    
-    if (!payload || !rid || payload.rid !== rid) {
-      return NextResponse.json(
-        { success: false, error: "Payment required." },
-        { status: 402 }
-      );
+
+    // Admin bypass — skip all verification for the owner
+    const isAdminBypass = token === "admin-bypass-token";
+
+    if (!isAdminBypass) {
+      const payload = verifyToken(token);
+      
+      if (!payload || !rid || payload.rid !== rid) {
+        return NextResponse.json(
+          { success: false, error: "Payment required." },
+          { status: 402 }
+        );
+      }
     }
     
     if (!process.env.RAPIDAPI_KEY) {
